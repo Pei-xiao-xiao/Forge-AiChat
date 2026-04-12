@@ -32,27 +32,18 @@ public class ServerCommandHandler {
                 .then(CommandManager.literal("list")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                if (fun.ollamachat.OllamaConfig.getApiProvider() == fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA) {
-                                    // Ollama：先尝试 HTTP API，失败回退命令行
-                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                    if (count > 0) {
-                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
-                                            final String modelName = model;
-                                            context.getSource().sendFeedback(() -> Text.literal("  - " + modelName), false);
-                                        }
-                                        context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.list_success"), false);
-                                    } else {
-                                        listModels(context.getSource());
+                                fun.ollamachat.OllamaModelManager.refreshModels();
+                                List<String> models = fun.ollamachat.OllamaModelManager.getCachedModels();
+                                if (!models.isEmpty()) {
+                                    for (String model : models) {
+                                        final String modelName = model;
+                                        context.getSource().sendFeedback(() -> Text.literal("  - " + modelName), false);
                                     }
+                                    context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.list_success"), false);
                                 } else {
-                                    // OpenAI / LM Studio：使用 HTTP API
-                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                    if (count > 0) {
-                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
-                                            final String modelName = model;
-                                            context.getSource().sendFeedback(() -> Text.literal("  - " + modelName), false);
-                                        }
-                                        context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.list_success"), false);
+                                    // Ollama 模式下回退到命令行
+                                    if (fun.ollamachat.OllamaConfig.getApiProvider() == fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA) {
+                                        listModels(context.getSource());
                                     } else {
                                         context.getSource().sendError(Text.translatable("command.ollama.error.model_fetch_failed"));
                                     }

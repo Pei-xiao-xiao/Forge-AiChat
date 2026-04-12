@@ -205,9 +205,7 @@ public class OllamaModelManager {
     }
 
     static {
-        // 定期刷新模型列表
-        // Ollama: 使用命令行 ollama list
-        // OpenAI/LM Studio: 使用 HTTP API
+        // 根据当前 API 提供商类型定期刷新模型列表
         Executors.newSingleThreadScheduledExecutor()
                 .scheduleAtFixedRate(
                         OllamaModelManager::refreshModels,

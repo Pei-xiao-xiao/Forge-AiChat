@@ -18,20 +18,8 @@ public class OllamaCommandHandler {
     private static final ExecutorService COMMAND_EXECUTOR = Executors.newFixedThreadPool(2);
 
     private static final SuggestionProvider<FabricClientCommandSource> MODEL_SUGGESTIONS = (context, builder) -> {
-        try {
-            Process process = new ProcessBuilder("ollama", "list").start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                reader.readLine(); // Skip header
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.trim().isEmpty()) {
-                        String modelName = line.split("\\s+")[0];
-                        builder.suggest(modelName);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            builder.suggest(Text.translatable("command.ollama.error.list_failed").getString());
+        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
+            builder.suggest(model);
         }
         return CompletableFuture.completedFuture(builder.build());
     };
@@ -42,26 +30,17 @@ public class OllamaCommandHandler {
                 .then(ClientCommandManager.literal("list")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                fun.ollamachat.OllamaConfig.ApiProvider provider = fun.ollamachat.OllamaConfig.getApiProvider();
-                                if (provider == fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA) {
-                                    // Ollama：先尝试 HTTP API，失败回退命令行
-                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                    if (count > 0) {
-                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
-                                            context.getSource().sendFeedback(Text.literal("  - " + model));
-                                        }
-                                        context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
-                                    } else {
-                                        listModels(context.getSource());
+                                fun.ollamachat.OllamaModelManager.refreshModels();
+                                java.util.List<String> models = fun.ollamachat.OllamaModelManager.getCachedModels();
+                                if (!models.isEmpty()) {
+                                    for (String model : models) {
+                                        context.getSource().sendFeedback(Text.literal("  - " + model));
                                     }
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
                                 } else {
-                                    // OpenAI / LM Studio：使用 HTTP API
-                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                    if (count > 0) {
-                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
-                                            context.getSource().sendFeedback(Text.literal("  - " + model));
-                                        }
-                                        context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
+                                    // Ollama 模式下回退到命令行
+                                    if (fun.ollamachat.OllamaConfig.getApiProvider() == fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA) {
+                                        listModels(context.getSource());
                                     } else {
                                         context.getSource().sendError(Text.translatable("command.ollama.error.model_fetch_failed"));
                                     }
