@@ -1,0 +1,20 @@
+{
+  "command.ollama.error.generic": "An error occurred while executing the command.",
+  "command.ollama.error.model_not_found": "Model not found.",
+  "command.ollama.error.model_list_failed": "Failed to list models.",
+  "command.ollama.error.timeout": "Command timed out.",
+  "command.ollama.error.parse_failed": "Failed to parse response.",
+  "command.ollama.error.http_code": "HTTP error: %d",
+  "command.ollama.error.no_model_selected": "No model selected! Use /ollama model <name>",
+  "command.ollama.status.list_running": "Listing models...",
+  "command.ollama.status.list_success": "Models listed successfully.",
+  "command.ollama.status.serve_starting": "Starting Ollama service...",
+  "command.ollama.status.service_started": "Ollama service started.",
+  "command.ollama.status.ps_running": "Listing running models...",
+  "command.ollama.status.ps_success": "Running models listed successfully.",
+  "command.ollama.status.model_set": "Active model set to: %s",
+  "modmenu.nameTranslation.ollamachat": "Ollamachat",
+  "modmenu.descriptionTranslation.ollamachat": "Chat with a locally deployed AI model from Ollama in Minecraft.",
+  "modmenu.afadian": "afadian",
+  "command.ollama.status.models_refreshed": "models refreshed"
+}

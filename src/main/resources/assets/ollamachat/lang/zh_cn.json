@@ -1,0 +1,20 @@
+{
+  "command.ollama.error.generic": "执行命令时发生错误。",
+  "command.ollama.error.model_not_found": "未找到模型。",
+  "command.ollama.error.model_list_failed": "获取模型列表失败。",
+  "command.ollama.error.timeout": "命令超时。",
+  "command.ollama.error.parse_failed": "解析响应失败。",
+  "command.ollama.error.http_code": "HTTP 错误: %d",
+  "command.ollama.error.no_model_selected": "未选择模型！使用 /ollama model <名称>",
+  "command.ollama.status.list_running": "正在列出模型...",
+  "command.ollama.status.list_success": "模型列表获取成功。",
+  "command.ollama.status.serve_starting": "正在启动 Ollama 服务...",
+  "command.ollama.status.service_started": "Ollama 服务已启动。",
+  "command.ollama.status.ps_running": "正在列出运行中的模型...",
+  "command.ollama.status.ps_success": "运行中的模型列表获取成功。",
+  "command.ollama.status.model_set": "已设置活动模型为: %s",
+  "modmenu.nameTranslation.ollamachat": "ollamachat",
+  "modmenu.descriptionTranslation.ollamachat": "在我的世界与本地ollama部署的ai模型对话",
+  "modmenu.afadian": "爱发电",
+  "command.ollama.status.models_refreshed": "模型已刷新"
+}

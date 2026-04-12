@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "ollamachat",
+  "version": "${version}",
+  "name": "OllamaChat",
+  "description": "Chat with a locally deployed AI model from Ollama in Minecraft.",
+  "authors": [
+    "王兴家 <xingwangzhe@outlook.com>"
+  ],
+  "contact": {
+    "homepage": "https://github.com/xingwangzhe/ollamachat",
+    "sources": "https://github.com/xingwangzhe/ollamachat",
+    "issues": "https://github.com/xingwangzhe/ollamachat/issues"
+  },
+  "donate": "https://afdian.com/a/xingwangzhe",
+  "license": "MIT",
+  "icon": "assets/ollamachat/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "fun.xingwangzhe.ollamachat.client.OllamachatClient"
+    ],
+    "main": [
+      "fun.xingwangzhe.ollamachat.Ollamachat"
+    ]
+  },
+  "mixins": [
+    "ollamachat.mixins.json",
+    {
+      "config": "ollamachat.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  },
+  "custom": {
+    "modmenu": {
+      "links": {
+        "modmenu.kofi": "https://ko-fi.com/xingwangzhe/gallery",
+        "modmenu.afadian": "https://afdian.com/a/xingwangzhe"
+      }
+    }
+  }
+}
