@@ -131,8 +131,8 @@ public class OllamaConfig {
      * 本地 Ollama 不需要 API Key
      * 第三方服务（DeepSeek、OpenAI 等）需要在请求头中携带 Authorization: Bearer <apiKey>
      * 
-     * 注意：API Key 以明文存储在配置文件中。这是开源项目，混淆没有意义。
-     * 请确保配置文件（config/ollamachat_config.json）的访问权限安全。
+     * ⚠️ 安全警告：API Key 以明文存储在配置文件中（config/ollamachat_config.json）。
+     * 请确保该文件的访问权限受限，避免泄露。在共享服务器上使用时尤其注意。
      */
     public static void setApiKey(String key) {
         if (key != null) {
@@ -175,6 +175,7 @@ public class OllamaConfig {
      */
     public static void setMaxHistoryRecords(int max) {
         maxHistoryRecords = Math.max(10, Math.min(max, 1000));
+        saveConfig();
     }
 
     /**
@@ -191,13 +192,14 @@ public class OllamaConfig {
      */
     public static void setHistoryDirName(String dirName) {
         historyDirName = dirName;
+        saveConfig();
     }
 
     // ========== 配置持久化 ==========
 
     /**
      * 保存配置到文件
-     * API Key 明文存储，开源项目无需混淆
+     * ⚠️ API Key 以明文存储，请确保配置文件访问权限安全
      */
     public static void saveConfig() {
         try {
