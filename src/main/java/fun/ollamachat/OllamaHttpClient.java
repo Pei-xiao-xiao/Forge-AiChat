@@ -6,6 +6,9 @@ import com.google.gson.JsonParser;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,6 +21,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class OllamaHttpClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
     private static final HttpClient httpClient = HttpClient.newHttpClient();
     private static final AtomicInteger activeRequests = new AtomicInteger(0);
     private static final ExecutorService requestExecutor = Executors.newCachedThreadPool();
@@ -85,7 +89,7 @@ public class OllamaHttpClient {
                 .whenComplete((response, throwable) -> {
                     try {
                         if (throwable != null) {
-                            throwable.printStackTrace();
+                            LOGGER.error("AI request failed", throwable);
                             if (throwable instanceof TimeoutException) {
                                 callback.onError(Text.translatable("command.ollama.error.timeout").getString());
                             } else {

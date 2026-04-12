@@ -3,6 +3,8 @@ package fun.ollamachat;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileReader;
@@ -18,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 public class OllamaChatHistory {
+    private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Object FILE_LOCK = new Object();
 
@@ -125,7 +128,7 @@ public class OllamaChatHistory {
             Files.move(tempFile, filePath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             // 写入失败不影响主要功能
-            e.printStackTrace();
+            LOGGER.error("Failed to save chat history for player", e);
         }
     }
 
