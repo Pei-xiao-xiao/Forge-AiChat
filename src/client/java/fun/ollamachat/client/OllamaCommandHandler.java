@@ -119,8 +119,7 @@ public class OllamaCommandHandler {
                 // key - 设置 API Key
                 .then(ClientCommandManager.literal("key")
                         .executes(context -> {
-                            String key = fun.ollamachat.OllamaConfig.getApiKey();
-                            String masked = key.isEmpty() ? "(empty)" : key.substring(0, Math.min(4, key.length())) + "..." + key.substring(Math.max(0, key.length() - 4));
+                            String masked = fun.ollamachat.OllamaConfig.getMaskedApiKey();
                             context.getSource().sendFeedback(Text.translatable("command.ollama.status.key_status", masked));
                             return 1;
                         })

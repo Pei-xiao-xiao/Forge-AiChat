@@ -79,15 +79,34 @@ public class OllamaConfig {
 
     /**
      * 获取 API Key
+     * 注意：仅用于构建 HTTP 请求头，不应在日志或聊天中输出
      */
     public static String getApiKey() {
         return apiKey;
     }
 
     /**
+     * 获取脱敏后的 API Key（用于显示）
+     * 仅显示前3位和后3位，中间用 **** 替代
+     * 短于8位的 Key 完全遮掩为 ****
+     */
+    public static String getMaskedApiKey() {
+        if (apiKey.isEmpty()) {
+            return "(empty)";
+        }
+        if (apiKey.length() < 8) {
+            return "****";
+        }
+        return apiKey.substring(0, 3) + "****" + apiKey.substring(apiKey.length() - 3);
+    }
+
+    /**
      * 设置 API Key（用于第三方 API 鉴权）
      * 本地 Ollama 不需要 API Key
      * 第三方服务（DeepSeek、OpenAI 等）需要在请求头中携带 Authorization: Bearer <apiKey>
+     * 
+     * 安全说明：Key 仅存储在内存中，不会持久化到文件，游戏重启后需要重新设置。
+     * 这是有意设计——避免 API Key 以明文形式保存在磁盘上。
      */
     public static void setApiKey(String key) {
         if (key != null) {

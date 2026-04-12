@@ -187,13 +187,9 @@ public class OllamaHttpClient {
 
         requestJson.add("messages", messages);
 
-        // OpenAI 兼容接口的额外参数
-        // 一些第三方接口支持 search/reasoning 相关参数，这里通过扩展字段传递
-        // 大多数 OpenAI 兼容接口会忽略不认识的字段
-        if (OllamaModelManager.isSearchEnabled()) {
-            // DeepSeek 等支持 search 参数
-            requestJson.addProperty("search_enabled", true);
-        }
+        // 注意：OpenAI 兼容接口（/v1/chat/completions）通常不支持 search 参数
+        // 如果需要在线搜索功能，请使用 Ollama 原生 API
+        // 大多数第三方接口会忽略或拒绝不认识的字段，因此不添加 search 参数
 
         return requestJson.toString();
     }
