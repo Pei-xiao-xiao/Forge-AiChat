@@ -11,6 +11,7 @@ import net.minecraft.text.Text;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 
@@ -31,18 +32,30 @@ public class ServerCommandHandler {
                 .then(CommandManager.literal("list")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                // 先尝试从 API 获取模型列表
-                                int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                if (count > 0) {
-                                    // API 获取成功，直接显示缓存的模型列表
-                                    for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
-                                        final String modelName = model;
-                                        context.getSource().sendFeedback(() -> Text.literal("  - " + modelName), false);
+                                if (fun.ollamachat.OllamaConfig.getApiProvider() == fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA) {
+                                    // Ollama：先尝试 HTTP API，失败回退命令行
+                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
+                                    if (count > 0) {
+                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
+                                            final String modelName = model;
+                                            context.getSource().sendFeedback(() -> Text.literal("  - " + modelName), false);
+                                        }
+                                        context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.list_success"), false);
+                                    } else {
+                                        listModels(context.getSource());
                                     }
-                                    context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.list_success"), false);
                                 } else {
-                                    // API 获取失败，回退到 ollama list 命令行
-                                    listModels(context.getSource());
+                                    // OpenAI / LM Studio：使用 HTTP API
+                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
+                                    if (count > 0) {
+                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
+                                            final String modelName = model;
+                                            context.getSource().sendFeedback(() -> Text.literal("  - " + modelName), false);
+                                        }
+                                        context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.list_success"), false);
+                                    } else {
+                                        context.getSource().sendError(Text.translatable("command.ollama.error.model_fetch_failed"));
+                                    }
                                 }
                             });
                             return 1;
@@ -65,14 +78,9 @@ public class ServerCommandHandler {
                 .then(CommandManager.literal("refresh")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                if (count >= 0) {
-                                    context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.models_refreshed_api", count), false);
-                                } else {
-                                    // API 获取失败，回退到命令行方式
-                                    fun.ollamachat.OllamaModelManager.updateModelsFromSystem();
-                                    context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.models_refreshed"), false);
-                                }
+                                fun.ollamachat.OllamaModelManager.refreshModels();
+                                List<String> models = fun.ollamachat.OllamaModelManager.getCachedModels();
+                                context.getSource().sendFeedback(() -> Text.translatable("command.ollama.status.models_refreshed_api", models.size()), false);
                             });
                             return 1;
                         }))

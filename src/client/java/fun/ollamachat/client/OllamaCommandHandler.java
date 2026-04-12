@@ -42,16 +42,29 @@ public class OllamaCommandHandler {
                 .then(ClientCommandManager.literal("list")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                // 先尝试从 API 获取模型列表
-                                int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                if (count > 0) {
-                                    for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
-                                        context.getSource().sendFeedback(Text.literal("  - " + model));
+                                fun.ollamachat.OllamaConfig.ApiProvider provider = fun.ollamachat.OllamaConfig.getApiProvider();
+                                if (provider == fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA) {
+                                    // Ollama：先尝试 HTTP API，失败回退命令行
+                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
+                                    if (count > 0) {
+                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
+                                            context.getSource().sendFeedback(Text.literal("  - " + model));
+                                        }
+                                        context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
+                                    } else {
+                                        listModels(context.getSource());
                                     }
-                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
                                 } else {
-                                    // API 获取失败，回退到 ollama list 命令行
-                                    listModels(context.getSource());
+                                    // OpenAI / LM Studio：使用 HTTP API
+                                    int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
+                                    if (count > 0) {
+                                        for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
+                                            context.getSource().sendFeedback(Text.literal("  - " + model));
+                                        }
+                                        context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
+                                    } else {
+                                        context.getSource().sendError(Text.translatable("command.ollama.error.model_fetch_failed"));
+                                    }
                                 }
                             });
                             return 1;
@@ -74,14 +87,9 @@ public class OllamaCommandHandler {
                 .then(ClientCommandManager.literal("refresh")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
-                                if (count >= 0) {
-                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed_api", count));
-                                } else {
-                                    // API 获取失败，回退到命令行方式
-                                    fun.ollamachat.OllamaModelManager.updateModelsFromSystem();
-                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed"));
-                                }
+                                fun.ollamachat.OllamaModelManager.refreshModels();
+                                java.util.List<String> models = fun.ollamachat.OllamaModelManager.getCachedModels();
+                                context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed_api", models.size()));
                             });
                             return 1;
                         }))

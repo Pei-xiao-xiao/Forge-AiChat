@@ -9,6 +9,7 @@
   "command.ollama.error.no_model_selected": "No model selected! Use /ollama model <name>",
   "command.ollama.error.history_clear_failed": "Failed to clear chat history.",
   "command.ollama.error.search_not_supported": "Online search is only supported with Ollama native API. Current mode: OpenAI compatible.",
+  "command.ollama.error.model_fetch_failed": "Failed to fetch model list. Please check your API URL and key.",
   "command.ollama.error.no_response_id": "No LM Studio conversation context. Starting a new conversation.",
   "command.ollama.status.api_status": "Current API URL: %s",
   "command.ollama.status.api_set": "API URL set to: %s",

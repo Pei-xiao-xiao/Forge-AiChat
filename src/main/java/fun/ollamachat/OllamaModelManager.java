@@ -35,6 +35,7 @@ public class OllamaModelManager {
      * 通过 HTTP API 获取模型列表
      * Ollama: GET /api/tags → {"models": [{"name": "..."}]}
      * OpenAI 兼容: GET /v1/models → {"data": [{"id": "..."}]}
+     * LM Studio: GET /v1/models → {"data": [{"id": "..."}]}
      * 
      * @return 获取到的模型数量，-1 表示失败
      */
@@ -204,10 +205,32 @@ public class OllamaModelManager {
     }
 
     static {
+        // 定期刷新模型列表
+        // Ollama: 使用命令行 ollama list
+        // OpenAI/LM Studio: 使用 HTTP API
         Executors.newSingleThreadScheduledExecutor()
                 .scheduleAtFixedRate(
-                        OllamaModelManager::updateModelsFromSystem,
+                        OllamaModelManager::refreshModels,
                         0, MODEL_UPDATE_INTERVAL, TimeUnit.SECONDS
                 );
+    }
+
+    /**
+     * 根据当前 Provider 刷新模型列表
+     * Ollama → 先尝试 HTTP API，失败回退到 ollama list 命令行
+     * OpenAI/LM Studio → 仅使用 HTTP API
+     */
+    public static void refreshModels() {
+        OllamaConfig.ApiProvider provider = OllamaConfig.getApiProvider();
+        if (provider == OllamaConfig.ApiProvider.OLLAMA) {
+            // Ollama：先尝试 HTTP API，失败回退命令行
+            int count = fetchModelsFromApi();
+            if (count < 0) {
+                updateModelsFromSystem();
+            }
+        } else {
+            // OpenAI / LM Studio：仅使用 HTTP API
+            fetchModelsFromApi();
+        }
     }
 }
