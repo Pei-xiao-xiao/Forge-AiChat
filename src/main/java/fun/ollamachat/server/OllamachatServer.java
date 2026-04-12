@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat.server;
+package fun.ollamachat.server;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;

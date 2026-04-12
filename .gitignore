@@ -125,6 +125,7 @@ run-gradle.bat
 
 # IDE workspace files
 .workbuddy/
+.trae/
 
 # Compiled output
 bin/

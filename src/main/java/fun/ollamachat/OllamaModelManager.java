@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat;
+package fun.ollamachat;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat.client;
+package fun.ollamachat.client;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -63,7 +63,7 @@ public class OllamaCommandHandler {
                 .then(ClientCommandManager.literal("refresh")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                fun.xingwangzhe.ollamachat.OllamaModelManager.updateModelsFromSystem();
+                                fun.ollamachat.OllamaModelManager.updateModelsFromSystem();
                                 context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed"));
                             });
                             return 1;
@@ -74,63 +74,112 @@ public class OllamaCommandHandler {
                                 .suggests(MODEL_SUGGESTIONS)
                                 .executes(context -> {
                                     String modelName = StringArgumentType.getString(context, "modelname").trim();
-                                    if (fun.xingwangzhe.ollamachat.OllamaModelManager.isModelValid(modelName)) {
-                                        fun.xingwangzhe.ollamachat.OllamaModelManager.setCurrentModel(modelName);
+                                    if (fun.ollamachat.OllamaModelManager.isModelValid(modelName)) {
+                                        fun.ollamachat.OllamaModelManager.setCurrentModel(modelName);
                                         context.getSource().sendFeedback(Text.translatable("command.ollama.status.model_set", modelName));
                                     } else {
                                         context.getSource().sendError(Text.translatable("command.ollama.error.model_not_found"));
                                     }
                                     return 1;
                                 })))
+                // api - 设置 API 地址
+                .then(ClientCommandManager.literal("api")
+                        .executes(context -> {
+                            String currentUrl = fun.ollamachat.OllamaConfig.getApiUrl();
+                            context.getSource().sendFeedback(Text.translatable("command.ollama.status.api_status", currentUrl));
+                            return 1;
+                        })
+                        .then(ClientCommandManager.argument("url", StringArgumentType.greedyString())
+                                .executes(context -> {
+                                    String url = StringArgumentType.getString(context, "url").trim();
+                                    fun.ollamachat.OllamaConfig.setApiUrl(url);
+                                    String provider = fun.ollamachat.OllamaConfig.getApiProvider().name();
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.api_set_with_provider", url, provider));
+                                    return 1;
+                                })))
+                // provider - 设置 API 提供者类型
+                .then(ClientCommandManager.literal("provider")
+                        .executes(context -> {
+                            fun.ollamachat.OllamaConfig.ApiProvider current = fun.ollamachat.OllamaConfig.getApiProvider();
+                            context.getSource().sendFeedback(Text.translatable("command.ollama.status.provider_status", current.name()));
+                            return 1;
+                        })
+                        .then(ClientCommandManager.literal("ollama")
+                                .executes(context -> {
+                                    fun.ollamachat.OllamaConfig.setApiProvider(fun.ollamachat.OllamaConfig.ApiProvider.OLLAMA);
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.provider_set", "Ollama"));
+                                    return 1;
+                                }))
+                        .then(ClientCommandManager.literal("openai")
+                                .executes(context -> {
+                                    fun.ollamachat.OllamaConfig.setApiProvider(fun.ollamachat.OllamaConfig.ApiProvider.OPENAI);
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.provider_set", "OpenAI Compatible"));
+                                    return 1;
+                                })))
+                // key - 设置 API Key
+                .then(ClientCommandManager.literal("key")
+                        .executes(context -> {
+                            String key = fun.ollamachat.OllamaConfig.getApiKey();
+                            String masked = key.isEmpty() ? "(empty)" : key.substring(0, Math.min(4, key.length())) + "..." + key.substring(Math.max(0, key.length() - 4));
+                            context.getSource().sendFeedback(Text.translatable("command.ollama.status.key_status", masked));
+                            return 1;
+                        })
+                        .then(ClientCommandManager.argument("apikey", StringArgumentType.greedyString())
+                                .executes(context -> {
+                                    String key = StringArgumentType.getString(context, "apikey").trim();
+                                    fun.ollamachat.OllamaConfig.setApiKey(key);
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.key_set"));
+                                    return 1;
+                                })))
                 // think - 深度思考开关
                 .then(ClientCommandManager.literal("think")
                         .executes(context -> {
-                            boolean enabled = fun.xingwangzhe.ollamachat.OllamaModelManager.isThinkEnabled();
+                            boolean enabled = fun.ollamachat.OllamaModelManager.isThinkEnabled();
                             context.getSource().sendFeedback(Text.translatable("command.ollama.status.think_status", enabled ? "ON" : "OFF"));
                             return 1;
                         })
                         .then(ClientCommandManager.literal("on")
                                 .executes(context -> {
-                                    fun.xingwangzhe.ollamachat.OllamaModelManager.setThinkEnabled(true);
+                                    fun.ollamachat.OllamaModelManager.setThinkEnabled(true);
                                     context.getSource().sendFeedback(Text.translatable("command.ollama.status.think_enabled"));
                                     return 1;
                                 }))
                         .then(ClientCommandManager.literal("off")
                                 .executes(context -> {
-                                    fun.xingwangzhe.ollamachat.OllamaModelManager.setThinkEnabled(false);
+                                    fun.ollamachat.OllamaModelManager.setThinkEnabled(false);
                                     context.getSource().sendFeedback(Text.translatable("command.ollama.status.think_disabled"));
                                     return 1;
                                 })))
                 // search - 在线搜索开关
                 .then(ClientCommandManager.literal("search")
                         .executes(context -> {
-                            boolean enabled = fun.xingwangzhe.ollamachat.OllamaModelManager.isSearchEnabled();
+                            boolean enabled = fun.ollamachat.OllamaModelManager.isSearchEnabled();
                             context.getSource().sendFeedback(Text.translatable("command.ollama.status.search_status", enabled ? "ON" : "OFF"));
                             return 1;
                         })
                         .then(ClientCommandManager.literal("on")
                                 .executes(context -> {
-                                    fun.xingwangzhe.ollamachat.OllamaModelManager.setSearchEnabled(true);
+                                    fun.ollamachat.OllamaModelManager.setSearchEnabled(true);
                                     context.getSource().sendFeedback(Text.translatable("command.ollama.status.search_enabled"));
                                     return 1;
                                 }))
                         .then(ClientCommandManager.literal("off")
                                 .executes(context -> {
-                                    fun.xingwangzhe.ollamachat.OllamaModelManager.setSearchEnabled(false);
+                                    fun.ollamachat.OllamaModelManager.setSearchEnabled(false);
                                     context.getSource().sendFeedback(Text.translatable("command.ollama.status.search_disabled"));
                                     return 1;
                                 })))
                 // context - 设置上下文轮数
                 .then(ClientCommandManager.literal("context")
                         .executes(context -> {
-                            int rounds = fun.xingwangzhe.ollamachat.OllamaConfig.getContextRounds();
+                            int rounds = fun.ollamachat.OllamaConfig.getContextRounds();
                             context.getSource().sendFeedback(Text.translatable("command.ollama.status.context_status", rounds));
                             return 1;
                         })
                         .then(ClientCommandManager.argument("rounds", IntegerArgumentType.integer(0, 50))
                                 .executes(context -> {
                                     int rounds = IntegerArgumentType.getInteger(context, "rounds");
-                                    fun.xingwangzhe.ollamachat.OllamaConfig.setContextRounds(rounds);
+                                    fun.ollamachat.OllamaConfig.setContextRounds(rounds);
                                     context.getSource().sendFeedback(Text.translatable("command.ollama.status.context_set", rounds));
                                     return 1;
                                 })))
@@ -138,14 +187,14 @@ public class OllamaCommandHandler {
                 .then(ClientCommandManager.literal("history")
                         .executes(context -> {
                             UUID playerUuid = MinecraftClient.getInstance().player.getUuid();
-                            int count = fun.xingwangzhe.ollamachat.OllamaChatHistory.getHistoryCount(playerUuid);
+                            int count = fun.ollamachat.OllamaChatHistory.getHistoryCount(playerUuid);
                             context.getSource().sendFeedback(Text.translatable("command.ollama.status.history_count", count));
                             return 1;
                         })
                         .then(ClientCommandManager.literal("clear")
                                 .executes(context -> {
                                     UUID playerUuid = MinecraftClient.getInstance().player.getUuid();
-                                    boolean success = fun.xingwangzhe.ollamachat.OllamaChatHistory.clearHistory(playerUuid);
+                                    boolean success = fun.ollamachat.OllamaChatHistory.clearHistory(playerUuid);
                                     if (success) {
                                         context.getSource().sendFeedback(Text.translatable("command.ollama.status.history_cleared"));
                                     } else {

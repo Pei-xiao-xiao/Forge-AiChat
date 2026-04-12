@@ -1,0 +1,148 @@
+package fun.ollamachat;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+public class OllamaConfig {
+    /**
+     * API 提供者类型
+     * OLLAMA: Ollama 原生 /api/generate 格式
+     * OPENAI: OpenAI 兼容 /v1/chat/completions 格式（DeepSeek、智谱、通义千问等）
+     */
+    public enum ApiProvider {
+        OLLAMA,
+        OPENAI
+    }
+
+    private static ApiProvider apiProvider = ApiProvider.OLLAMA;
+    private static String apiUrl = "http://localhost:11434/api/generate";  // Ollama API 地址
+    private static String apiKey = "";  // 第三方 API Key（OpenAI 兼容接口需要）
+    private static int contextRounds = 5;        // 上下文轮数（每轮=1条玩家消息+1条AI回复）
+    private static int maxHistoryRecords = 200;   // 最大历史记录条数
+    private static String historyDirName = "ollamachat_history";
+
+    /**
+     * 获取 API 提供者类型
+     */
+    public static ApiProvider getApiProvider() {
+        return apiProvider;
+    }
+
+    /**
+     * 设置 API 提供者类型
+     * OLLAMA: 使用 /api/generate 请求格式
+     * OPENAI: 使用 /v1/chat/completions 请求格式（兼容 DeepSeek、智谱、通义千问等）
+     */
+    public static void setApiProvider(ApiProvider provider) {
+        apiProvider = provider;
+    }
+
+    /**
+     * 自动检测 API 提供者类型
+     * 根据 URL 路径自动判断：
+     * - 包含 /v1/ 或 /chat/completions → OPENAI
+     * - 其他 → OLLAMA
+     */
+    public static ApiProvider detectProvider(String url) {
+        if (url == null) return ApiProvider.OLLAMA;
+        String lower = url.toLowerCase();
+        if (lower.contains("/v1/") || lower.contains("/chat/completions")) {
+            return ApiProvider.OPENAI;
+        }
+        return ApiProvider.OLLAMA;
+    }
+
+    /**
+     * 获取 API URL
+     */
+    public static String getApiUrl() {
+        return apiUrl;
+    }
+
+    /**
+     * 设置 API URL
+     * 支持任意 Ollama 兼容的 API 地址，例如：
+     * - http://localhost:11434/api/generate （默认本地 Ollama）
+     * - http://192.168.1.100:11434/api/generate （局域网远程 Ollama）
+     * - https://api.deepseek.com/v1/chat/completions （DeepSeek）
+     * - https://open.bigmodel.cn/api/paas/v4/chat/completions （智谱 GLM）
+     * - https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions （通义千问）
+     * - https://api.openai.com/v1/chat/completions （OpenAI）
+     */
+    public static void setApiUrl(String url) {
+        if (url != null && !url.trim().isEmpty()) {
+            apiUrl = url.trim();
+            // 自动检测 provider
+            apiProvider = detectProvider(apiUrl);
+        }
+    }
+
+    /**
+     * 获取 API Key
+     */
+    public static String getApiKey() {
+        return apiKey;
+    }
+
+    /**
+     * 设置 API Key（用于第三方 API 鉴权）
+     * 本地 Ollama 不需要 API Key
+     * 第三方服务（DeepSeek、OpenAI 等）需要在请求头中携带 Authorization: Bearer <apiKey>
+     */
+    public static void setApiKey(String key) {
+        if (key != null) {
+            apiKey = key.trim();
+        }
+    }
+
+    /**
+     * 判断当前是否需要 API Key
+     */
+    public static boolean requiresApiKey() {
+        return apiProvider == ApiProvider.OPENAI;
+    }
+
+    /**
+     * 获取上下文轮数
+     */
+    public static int getContextRounds() {
+        return contextRounds;
+    }
+
+    /**
+     * 设置上下文轮数
+     */
+    public static void setContextRounds(int rounds) {
+        contextRounds = Math.max(0, Math.min(rounds, 50));
+    }
+
+    /**
+     * 获取最大历史记录条数
+     */
+    public static int getMaxHistoryRecords() {
+        return maxHistoryRecords;
+    }
+
+    /**
+     * 设置最大历史记录条数
+     */
+    public static void setMaxHistoryRecords(int max) {
+        maxHistoryRecords = Math.max(10, Math.min(max, 1000));
+    }
+
+    /**
+     * 获取历史文件存储目录
+     * 服务端：服务器运行目录/ollamachat_history/
+     * 客户端独立运行：游戏运行目录/ollamachat_history/
+     */
+    public static Path getHistoryDir() {
+        return Paths.get(System.getProperty("user.dir")).resolve(historyDirName);
+    }
+
+    /**
+     * 设置历史目录名
+     */
+    public static void setHistoryDirName(String dirName) {
+        historyDirName = dirName;
+    }
+}

@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat.server;
+package fun.ollamachat.server;
 
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.network.message.SignedMessage;
@@ -21,13 +21,13 @@ public class ServerMessageHandler {
 
             java.util.UUID playerUuid = player.getUuid();
 
-            fun.xingwangzhe.ollamachat.OllamaHttpClient.handleAIRequestAsync(userInput, playerUuid,
-                    new fun.xingwangzhe.ollamachat.OllamaHttpClient.AIResponseCallback() {
+            fun.ollamachat.OllamaHttpClient.handleAIRequestAsync(userInput, playerUuid,
+                    new fun.ollamachat.OllamaHttpClient.AIResponseCallback() {
                         @Override
-                        public void onSuccess(fun.xingwangzhe.ollamachat.OllamaHttpClient.AIResponse response) {
+                        public void onSuccess(fun.ollamachat.OllamaHttpClient.AIResponse response) {
                             player.getServer().execute(() -> {
                                 if (response.hasThinking()) {
-                                    Text aiText = fun.xingwangzhe.ollamachat.OllamaHttpClient.buildAIText(response);
+                                    Text aiText = fun.ollamachat.OllamaHttpClient.buildAIText(response);
                                     player.sendMessage(aiText);
                                 } else {
                                     player.sendMessage(Text.literal("[AI] " + response.response));

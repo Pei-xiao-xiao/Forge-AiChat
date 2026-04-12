@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat;
+package fun.ollamachat;
 
 import net.fabricmc.api.ModInitializer;
 

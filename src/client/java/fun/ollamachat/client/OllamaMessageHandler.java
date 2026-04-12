@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat.client;
+package fun.ollamachat.client;
 
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
@@ -31,15 +31,15 @@ public class OllamaMessageHandler {
 
         if (!isClientMessage && messageText.startsWith("ai ")) {
             UUID playerUuid = gameProfile != null ? gameProfile.getId() : UUID.nameUUIDFromBytes(senderName.getBytes());
-            fun.xingwangzhe.ollamachat.OllamaHttpClient.handleAIRequestAsync(
+            fun.ollamachat.OllamaHttpClient.handleAIRequestAsync(
                     messageText.substring(3), playerUuid,
-                    new fun.xingwangzhe.ollamachat.OllamaHttpClient.AIResponseCallback() {
+                    new fun.ollamachat.OllamaHttpClient.AIResponseCallback() {
                         @Override
-                        public void onSuccess(fun.xingwangzhe.ollamachat.OllamaHttpClient.AIResponse response) {
+                        public void onSuccess(fun.ollamachat.OllamaHttpClient.AIResponse response) {
                             MinecraftClient.getInstance().execute(() -> {
                                 if (response.hasThinking()) {
                                     // 有思考内容时发送带 tooltip 的富文本
-                                    Text aiText = fun.xingwangzhe.ollamachat.OllamaHttpClient.buildAIText(response);
+                                    Text aiText = fun.ollamachat.OllamaHttpClient.buildAIText(response);
                                     MinecraftClient.getInstance().player.sendMessage(aiText);
                                 } else {
                                     // 无思考内容时用普通聊天消息发送
@@ -61,14 +61,14 @@ public class OllamaMessageHandler {
     private static boolean onSentMessage(String message) {
         if (message.startsWith("ai ")) {
             UUID playerUuid = MinecraftClient.getInstance().player.getUuid();
-            fun.xingwangzhe.ollamachat.OllamaHttpClient.handleAIRequestAsync(
+            fun.ollamachat.OllamaHttpClient.handleAIRequestAsync(
                     message.substring(3), playerUuid,
-                    new fun.xingwangzhe.ollamachat.OllamaHttpClient.AIResponseCallback() {
+                    new fun.ollamachat.OllamaHttpClient.AIResponseCallback() {
                         @Override
-                        public void onSuccess(fun.xingwangzhe.ollamachat.OllamaHttpClient.AIResponse response) {
+                        public void onSuccess(fun.ollamachat.OllamaHttpClient.AIResponse response) {
                             MinecraftClient.getInstance().execute(() -> {
                                 if (response.hasThinking()) {
-                                    Text aiText = fun.xingwangzhe.ollamachat.OllamaHttpClient.buildAIText(response);
+                                    Text aiText = fun.ollamachat.OllamaHttpClient.buildAIText(response);
                                     MinecraftClient.getInstance().player.sendMessage(aiText);
                                 } else {
                                     MinecraftClient.getInstance().player.networkHandler.sendChatMessage("[AI] " + response.response);

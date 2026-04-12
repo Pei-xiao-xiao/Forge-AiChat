@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat.client;
+package fun.ollamachat.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -9,7 +9,7 @@ public class OllamachatClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         Executors.newSingleThreadScheduledExecutor().schedule(
-                fun.xingwangzhe.ollamachat.OllamaModelManager::updateModelsFromSystem,
+                fun.ollamachat.OllamaModelManager::updateModelsFromSystem,
                 1, TimeUnit.SECONDS
         );
 

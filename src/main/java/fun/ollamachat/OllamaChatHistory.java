@@ -1,4 +1,4 @@
-package fun.xingwangzhe.ollamachat;
+package fun.ollamachat;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

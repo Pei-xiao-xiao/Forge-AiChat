@@ -5,26 +5,26 @@
   "name": "OllamaChat",
   "description": "Chat with a locally deployed AI model from Ollama in Minecraft.",
   "authors": [
-    "王兴家 <xingwangzhe@outlook.com>"
+    ""
   ],
   "contact": {
-    "homepage": "https://github.com/xingwangzhe/ollamachat",
-    "sources": "https://github.com/xingwangzhe/ollamachat",
-    "issues": "https://github.com/xingwangzhe/ollamachat/issues"
+    "homepage": "https://github.com/Pei-xiao-xiao/Forge-ollamaChat",
+    "sources": "https://github.com/Pei-xiao-xiao/Forge-ollamaChat",
+    "issues": "https://github.com/Pei-xiao-xiao/Forge-ollamaChat/issues"
   },
-  "donate": "https://afdian.com/a/xingwangzhe",
+  "donate": "kongbai",
   "license": "MIT",
   "icon": "assets/ollamachat/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "fun.xingwangzhe.ollamachat.Ollamachat"
+      "fun.ollamachat.Ollamachat"
     ],
     "client": [
-      "fun.xingwangzhe.ollamachat.client.OllamachatClient"
+      "fun.ollamachat.client.OllamachatClient"
     ],
     "server": [
-      "fun.xingwangzhe.ollamachat.server.OllamachatServer"
+      "fun.ollamachat.server.OllamachatServer"
     ]
   },
   "mixins": [
@@ -42,8 +42,8 @@
   "custom": {
     "modmenu": {
       "links": {
-        "modmenu.kofi": "https://ko-fi.com/xingwangzhe/gallery",
-        "modmenu.afadian": "https://afdian.com/a/xingwangzhe"
+        "modmenu.kofi": "kongbai",
+        "modmenu.afadian": "kongbai"
       }
     }
   }
