@@ -1,9 +1,21 @@
 package fun.ollamachat;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class OllamaConfig {
+    private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = Paths.get(System.getProperty("user.dir"), "config", "ollamachat_config.json");
     /**
      * API 提供者类型
      * OLLAMA: Ollama 原生 /api/generate 格式
@@ -37,6 +49,7 @@ public class OllamaConfig {
      */
     public static void setApiProvider(ApiProvider provider) {
         apiProvider = provider;
+        saveConfig();
     }
 
     /**
@@ -86,6 +99,7 @@ public class OllamaConfig {
             apiUrl = url.trim();
             // 自动检测 provider
             apiProvider = detectProvider(apiUrl);
+            saveConfig();
         }
     }
 
@@ -117,12 +131,13 @@ public class OllamaConfig {
      * 本地 Ollama 不需要 API Key
      * 第三方服务（DeepSeek、OpenAI 等）需要在请求头中携带 Authorization: Bearer <apiKey>
      * 
-     * 安全说明：Key 仅存储在内存中，不会持久化到文件，游戏重启后需要重新设置。
-     * 这是有意设计——避免 API Key 以明文形式保存在磁盘上。
+     * 注意：API Key 以明文存储在配置文件中。这是开源项目，混淆没有意义。
+     * 请确保配置文件（config/ollamachat_config.json）的访问权限安全。
      */
     public static void setApiKey(String key) {
         if (key != null) {
             apiKey = key.trim();
+            saveConfig();
         }
     }
 
@@ -145,6 +160,7 @@ public class OllamaConfig {
      */
     public static void setContextRounds(int rounds) {
         contextRounds = Math.max(0, Math.min(rounds, 50));
+        saveConfig();
     }
 
     /**
@@ -175,5 +191,74 @@ public class OllamaConfig {
      */
     public static void setHistoryDirName(String dirName) {
         historyDirName = dirName;
+    }
+
+    // ========== 配置持久化 ==========
+
+    /**
+     * 保存配置到文件
+     * API Key 明文存储，开源项目无需混淆
+     */
+    public static void saveConfig() {
+        try {
+            JsonObject config = new JsonObject();
+            config.addProperty("apiUrl", apiUrl);
+            config.addProperty("apiProvider", apiProvider.name());
+            config.addProperty("apiKey", apiKey);
+            config.addProperty("contextRounds", contextRounds);
+            config.addProperty("maxHistoryRecords", maxHistoryRecords);
+
+            Path parentDir = CONFIG_PATH.getParent();
+            if (parentDir != null && !Files.exists(parentDir)) {
+                Files.createDirectories(parentDir);
+            }
+
+            // 原子写入：先写临时文件，再重命名
+            Path tempPath = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
+            Files.writeString(tempPath, GSON.toJson(config));
+            Files.move(tempPath, CONFIG_PATH,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            LOGGER.error("Failed to save config", e);
+        }
+    }
+
+    /**
+     * 从文件加载配置
+     * 在模组初始化时调用
+     */
+    public static void loadConfig() {
+        try {
+            if (!Files.exists(CONFIG_PATH)) {
+                return;
+            }
+            String content = Files.readString(CONFIG_PATH);
+            JsonObject config = JsonParser.parseString(content).getAsJsonObject();
+
+            if (config.has("apiUrl")) {
+                apiUrl = config.get("apiUrl").getAsString();
+            }
+            if (config.has("apiProvider")) {
+                try {
+                    apiProvider = ApiProvider.valueOf(config.get("apiProvider").getAsString());
+                } catch (IllegalArgumentException e) {
+                    apiProvider = detectProvider(apiUrl);
+                }
+            }
+            if (config.has("apiKey")) {
+                apiKey = config.get("apiKey").getAsString();
+            }
+            if (config.has("contextRounds")) {
+                contextRounds = Math.max(0, Math.min(config.get("contextRounds").getAsInt(), 50));
+            }
+            if (config.has("maxHistoryRecords")) {
+                maxHistoryRecords = Math.max(10, Math.min(config.get("maxHistoryRecords").getAsInt(), 1000));
+            }
+
+            LOGGER.info("Config loaded from {}", CONFIG_PATH);
+        } catch (Exception e) {
+            LOGGER.error("Failed to load config", e);
+        }
     }
 }
