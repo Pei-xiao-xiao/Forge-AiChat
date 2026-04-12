@@ -25,7 +25,13 @@ public class AiModelManager {
     private static volatile boolean thinkEnabled = false;
     private static volatile boolean searchEnabled = false;
     private static final int MODEL_UPDATE_INTERVAL = 300;
+    // 主客户端：自动协商 HTTP 版本
     private static final HttpClient modelHttpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+    
+    // 回退客户端：强制 HTTP/1.1，用于不支持 HTTP/2 的本地服务
+    private static final HttpClient modelHttpClientFallback = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .version(HttpClient.Version.HTTP_1_1)
             .build();
@@ -51,6 +57,63 @@ public class AiModelManager {
      *               ollama=Ollama格式{"models":[{"name":"..."}]}
      * @return 解析到的模型列表，null 表示请求失败
      */
+    /**
+     * 从 JSON 数组中提取模型名称
+     * @param jsonArray JSON 数组
+     * @param idField 模型标识字段名（"id", "key", "name" 等）
+     * @param typeField 类型过滤字段名（如 "type"），null 表示不过滤
+     * @param typeValue 类型过滤值（如 "llm"），仅提取匹配的模型
+     * @return 模型名称列表
+     */
+    private static List<String> extractModelNames(JsonArray jsonArray, String idField, String typeField, String typeValue) {
+        List<String> models = new ArrayList<>();
+        for (int i = 0; i < jsonArray.size(); i++) {
+            JsonObject modelObj = jsonArray.get(i).getAsJsonObject();
+            // 如果指定了类型过滤，只提取匹配的模型
+            if (typeField != null) {
+                String type = modelObj.has(typeField) ? modelObj.get(typeField).getAsString() : typeValue;
+                if (!typeValue.equals(type)) continue;
+            }
+            if (modelObj.has(idField)) {
+                models.add(modelObj.get(idField).getAsString());
+            }
+        }
+        return models;
+    }
+    
+    /**
+     * 根据 API 格式解析模型列表 JSON
+     * @param jsonObject 响应 JSON
+     * @param format 格式类型：openai / lmstudio / ollama
+     * @return 模型名称列表
+     */
+    private static List<String> parseModelsJson(JsonObject jsonObject, String format) {
+        switch (format) {
+            case "openai":
+                // OpenAI 格式：{"data": [{"id": "model-name"}, ...]}
+                if (jsonObject.has("data")) {
+                    return extractModelNames(jsonObject.getAsJsonArray("data"), "id", null, null);
+                }
+                return new ArrayList<>();
+            case "lmstudio":
+                // LM Studio 原生格式：{"models": [{"key": "model-name", "type": "llm"}, ...]}
+                // 只提取 type=llm 的模型（排除 embedding 等类型）
+                if (jsonObject.has("models")) {
+                    return extractModelNames(jsonObject.getAsJsonArray("models"), "key", "type", "llm");
+                }
+                return new ArrayList<>();
+            default:
+                // Ollama 格式：{"models": [{"name": "model-name"}, ...]}
+                if (jsonObject.has("models")) {
+                    return extractModelNames(jsonObject.getAsJsonArray("models"), "name", null, null);
+                }
+                return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 尝试从指定 URL 获取模型列表（自动回退 HTTP/1.1）
+     */
     private static List<String> tryFetchModels(String url, String format) {
         try {
             LOGGER.info("尝试获取模型列表: {} (格式: {})", url, format);
@@ -68,7 +131,22 @@ public class AiModelManager {
             }
             
             HttpRequest request = requestBuilder.build();
-            HttpResponse<String> response = modelHttpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            // 先尝试自动协商版本（优先 HTTP/2）
+            HttpResponse<String> response;
+            try {
+                response = modelHttpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (java.net.http.HttpTimeoutException e) {
+                // HTTP/2 协商超时，回退到 HTTP/1.1
+                LOGGER.info("HTTP/2 协商超时，回退到 HTTP/1.1: {}", url);
+                HttpRequest fallbackRequest = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofSeconds(10))
+                        .GET()
+                        .header("Authorization", request.headers().firstValue("Authorization").orElse(""))
+                        .build();
+                response = modelHttpClientFallback.send(fallbackRequest, HttpResponse.BodyHandlers.ofString());
+            }
             
             LOGGER.info("模型列表响应: URL={}, 状态码={}", url, response.statusCode());
             
@@ -78,52 +156,10 @@ public class AiModelManager {
                 return null;
             }
             
-            List<String> models = new ArrayList<>();
             JsonObject jsonObject = JsonParser.parseString(response.body()).getAsJsonObject();
+            List<String> models = parseModelsJson(jsonObject, format);
             
-            switch (format) {
-                case "openai":
-                    // OpenAI 格式：{"data": [{"id": "model-name"}, ...]}
-                    if (jsonObject.has("data")) {
-                        JsonArray data = jsonObject.getAsJsonArray("data");
-                        for (int i = 0; i < data.size(); i++) {
-                            JsonObject modelObj = data.get(i).getAsJsonObject();
-                            if (modelObj.has("id")) {
-                                models.add(modelObj.get("id").getAsString());
-                            }
-                        }
-                    }
-                    break;
-                case "lmstudio":
-                    // LM Studio 原生格式：{"models": [{"key": "model-name", "type": "llm"}, ...]}
-                    // 只提取 type=llm 的模型（排除 embedding 等类型）
-                    if (jsonObject.has("models")) {
-                        JsonArray modelArray = jsonObject.getAsJsonArray("models");
-                        for (int i = 0; i < modelArray.size(); i++) {
-                            JsonObject modelObj = modelArray.get(i).getAsJsonObject();
-                            // 只添加 LLM 类型模型
-                            String type = modelObj.has("type") ? modelObj.get("type").getAsString() : "llm";
-                            if ("llm".equals(type) && modelObj.has("key")) {
-                                models.add(modelObj.get("key").getAsString());
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    // Ollama 格式：{"models": [{"name": "model-name"}, ...]}
-                    if (jsonObject.has("models")) {
-                        JsonArray modelArray = jsonObject.getAsJsonArray("models");
-                        for (int i = 0; i < modelArray.size(); i++) {
-                            JsonObject modelObj = modelArray.get(i).getAsJsonObject();
-                            if (modelObj.has("name")) {
-                                models.add(modelObj.get("name").getAsString());
-                            }
-                        }
-                    }
-                    break;
-            }
-            
-            return models;
+            return models.isEmpty() ? null : models;
         } catch (Exception e) {
             LOGGER.warn("获取模型列表异常: URL={}, 异常: {}", url, e.getClass().getSimpleName());
             return null;

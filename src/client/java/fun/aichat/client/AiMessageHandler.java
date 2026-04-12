@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.network.message.MessageType;
 import net.minecraft.network.message.SignedMessage;
+import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,60 +32,102 @@ public class AiMessageHandler {
 
         if (!isClientMessage && messageText.startsWith("ai ")) {
             UUID playerUuid = gameProfile != null ? gameProfile.getId() : UUID.nameUUIDFromBytes(senderName.getBytes());
-            fun.aichat.AiHttpClient.handleAIRequestAsync(
-                    messageText.substring(3), playerUuid,
-                    new fun.aichat.AiHttpClient.AIResponseCallback() {
-                        @Override
-                        public void onSuccess(fun.aichat.AiHttpClient.AIResponse response) {
-                            MinecraftClient.getInstance().execute(() -> {
-                                if (response.hasThinking()) {
-                                    // 有思考内容时发送带 tooltip 的富文本
-                                    Text aiText = fun.aichat.AiHttpClient.buildAIText(response);
-                                    MinecraftClient.getInstance().player.sendMessage(aiText);
-                                } else {
-                                    // 无思考内容时用普通聊天消息发送
-                                    MinecraftClient.getInstance().player.networkHandler.sendChatMessage("[AI] " + response.response);
-                                }
-                            });
-                        }
-
-                        @Override
-                        public void onError(String error) {
-                            MinecraftClient.getInstance().execute(() -> {
-                                MinecraftClient.getInstance().player.networkHandler.sendChatMessage("[AI] " + error);
-                            });
-                        }
-                    });
+            handleStreamChat(messageText.substring(3), playerUuid);
         }
     }
 
     private static boolean onSentMessage(String message) {
         if (message.startsWith("ai ")) {
             UUID playerUuid = MinecraftClient.getInstance().player.getUuid();
-            fun.aichat.AiHttpClient.handleAIRequestAsync(
-                    message.substring(3), playerUuid,
-                    new fun.aichat.AiHttpClient.AIResponseCallback() {
-                        @Override
-                        public void onSuccess(fun.aichat.AiHttpClient.AIResponse response) {
-                            MinecraftClient.getInstance().execute(() -> {
-                                if (response.hasThinking()) {
-                                    Text aiText = fun.aichat.AiHttpClient.buildAIText(response);
-                                    MinecraftClient.getInstance().player.sendMessage(aiText);
-                                } else {
-                                    MinecraftClient.getInstance().player.networkHandler.sendChatMessage("[AI] " + response.response);
-                                }
-                            });
-                        }
-
-                        @Override
-                        public void onError(String error) {
-                            MinecraftClient.getInstance().execute(() -> {
-                                MinecraftClient.getInstance().player.networkHandler.sendChatMessage("[AI] " + error);
-                            });
-                        }
-                    });
-            return false; // 拦截原始消息，不发送到服务器
+            handleStreamChat(message.substring(3), playerUuid);
+            return false; // 拦截原始消息
         }
         return true;
+    }
+
+    /**
+     * 流式聊天：先显示 [AI] 光标，然后逐字更新文本
+     */
+    private static void handleStreamChat(String userInput, UUID playerUuid) {
+        MinecraftClient client = MinecraftClient.getInstance();
+
+        // 在主线程发送初始占位消息
+        client.execute(() -> {
+            if (client.player == null) return;
+
+            // 发送带闪烁光标的初始消息
+            Text initialMsg = Text.literal("[AI] \u258C")  // ▌ 光标
+                    .styled(style -> style.withColor(0x55FF55)); // 绿色
+            client.player.sendMessage(initialMsg, false);
+        });
+
+        fun.aichat.AiHttpClient.handleAIRequestStream(userInput, playerUuid,
+                new fun.aichat.AiHttpClient.AIStreamCallback() {
+                    private final StringBuilder responseBuilder = new StringBuilder();
+                    private final StringBuilder thinkingBuilder = new StringBuilder();
+                    private long lastUpdateTime = 0;
+                    private static final long UPDATE_INTERVAL_MS = 80; // 每 80ms 更新一次显示
+
+                    @Override
+                    public void onToken(String token) {
+                        responseBuilder.append(token);
+                        throttledUpdate();
+                    }
+
+                    @Override
+                    public void onThinkingToken(String token) {
+                        thinkingBuilder.append(token);
+                    }
+
+                    @Override
+                    public void onComplete(fun.aichat.AiHttpClient.AIResponse response) {
+                        // 最终完整显示
+                        client.execute(() -> {
+                            if (client.player == null) return;
+
+                            Text finalText;
+                            if (response.hasThinking()) {
+                                Text thinkingText = Text.literal(response.thinking);
+                                finalText = Text.literal("[AI] " + response.response)
+                                        .styled(style -> style.withHoverEvent(
+                                                new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText)));
+                            } else {
+                                finalText = Text.literal("[AI] " + response.response)
+                                        .styled(style -> style.withColor(0x55FF55));
+                            }
+                            client.player.sendMessage(finalText, false);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        client.execute(() -> {
+                            if (client.player != null) {
+                                client.player.sendMessage(Text.literal("[AI] " + error)
+                                        .styled(style -> style.withColor(0xFF5555)), false);
+                            }
+                        });
+                    }
+
+                    private void throttledUpdate() {
+                        long now = System.currentTimeMillis();
+                        if (now - lastUpdateTime < UPDATE_INTERVAL_MS) return;
+                        lastUpdateTime = now;
+
+                        client.execute(() -> {
+                            if (client.player == null) return;
+
+                            String currentText = responseBuilder.toString();
+                            // 限制显示长度避免过长
+                            if (currentText.length() > 200) {
+                                currentText = currentText.substring(currentText.length() - 200);
+                            }
+
+                            Text progressMsg = Text.literal("[AI] " + currentText + "\u258C")
+                                    .styled(style -> style.withColor(0x55FF55));
+                            client.player.sendMessage(progressMsg, false);
+                        });
+                    }
+                });
     }
 }
