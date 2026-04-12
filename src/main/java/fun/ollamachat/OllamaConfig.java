@@ -130,9 +130,6 @@ public class OllamaConfig {
      * 设置 API Key（用于第三方 API 鉴权）
      * 本地 Ollama 不需要 API Key
      * 第三方服务（DeepSeek、OpenAI 等）需要在请求头中携带 Authorization: Bearer <apiKey>
-     * 
-     * ⚠️ 安全警告：API Key 以明文存储在配置文件中（config/ollamachat_config.json）。
-     * 请确保该文件的访问权限受限，避免泄露。在共享服务器上使用时尤其注意。
      */
     public static void setApiKey(String key) {
         if (key != null) {
