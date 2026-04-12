@@ -15,8 +15,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class OllamaModelManager {
+    private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
     private static final CopyOnWriteArrayList<String> cachedModels = new CopyOnWriteArrayList<>();
     private static String currentModel = "";
     private static volatile boolean thinkEnabled = false;
@@ -38,36 +41,50 @@ public class OllamaModelManager {
     public static int fetchModelsFromApi() {
         try {
             OllamaConfig.ApiProvider provider = OllamaConfig.getApiProvider();
+            String apiUrl = OllamaConfig.getApiUrl();
             String modelsUrl;
+
+            if (apiUrl == null || apiUrl.isEmpty()) {
+                LOGGER.error("API URL is not configured");
+                return -1;
+            }
             
             if (provider == OllamaConfig.ApiProvider.LMSTUDIO) {
-                // LM Studio：从 /api/v1/chat 推导出 /v1/models 端点
+                // LM Studio：推导出 /v1/models 端点
                 // 例如 http://localhost:1234/api/v1/chat → http://localhost:1234/v1/models
-                String baseUrl = OllamaConfig.getApiUrl();
-                int apiV1Index = baseUrl.indexOf("/api/v1/");
+                // 例如 http://localhost:1234/v1/responses → http://localhost:1234/v1/models
+                int apiV1Index = apiUrl.indexOf("/api/v1/");
                 if (apiV1Index >= 0) {
-                    modelsUrl = baseUrl.substring(0, apiV1Index) + "/v1/models";
+                    modelsUrl = apiUrl.substring(0, apiV1Index) + "/v1/models";
+                } else if (apiUrl.contains("/v1/")) {
+                    int v1Index = apiUrl.indexOf("/v1/");
+                    modelsUrl = apiUrl.substring(0, v1Index) + "/v1/models";
                 } else {
-                    modelsUrl = baseUrl.replaceAll("/api/[^/]*$", "/v1/models");
+                    // 无法推导，拼接默认路径
+                    modelsUrl = apiUrl.replaceAll("/[^/]*$", "") + "/v1/models";
                 }
             } else if (provider == OllamaConfig.ApiProvider.OPENAI) {
-                // OpenAI 兼容接口：从 API URL 推导出 /v1/models 端点
+                // OpenAI 兼容接口：推导出 /v1/models 端点
                 // 例如 https://api.deepseek.com/v1/chat/completions → https://api.deepseek.com/v1/models
                 // 例如 http://localhost:1234/v1/chat/completions → http://localhost:1234/v1/models
-                String baseUrl = OllamaConfig.getApiUrl();
-                int v1Index = baseUrl.indexOf("/v1/");
+                int v1Index = apiUrl.indexOf("/v1/");
                 if (v1Index >= 0) {
-                    modelsUrl = baseUrl.substring(0, v1Index) + "/v1/models";
-                } else if (baseUrl.contains("/chat/completions")) {
-                    modelsUrl = baseUrl.replace("/chat/completions", "/models");
+                    modelsUrl = apiUrl.substring(0, v1Index) + "/v1/models";
+                } else if (apiUrl.contains("/chat/completions")) {
+                    modelsUrl = apiUrl.replace("/chat/completions", "/models");
                 } else {
-                    modelsUrl = baseUrl.replaceAll("/[^/]*$", "/models");
+                    // 无法推导，拼接默认路径
+                    modelsUrl = apiUrl.replaceAll("/[^/]*$", "") + "/v1/models";
                 }
             } else {
-                // Ollama 原生：从 API URL 推导出 /api/tags 端点
+                // Ollama 原生：推导出 /api/tags 端点
                 // 例如 http://localhost:11434/api/generate → http://localhost:11434/api/tags
-                String baseUrl = OllamaConfig.getApiUrl();
-                modelsUrl = baseUrl.replaceAll("/api/[^/]*$", "/api/tags");
+                if (apiUrl.contains("/api/")) {
+                    modelsUrl = apiUrl.replaceAll("/api/[^/]*$", "/api/tags");
+                } else {
+                    // URL 不含 /api/，拼接默认路径
+                    modelsUrl = apiUrl.replaceAll("/[^/]*$", "") + "/api/tags";
+                }
             }
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
