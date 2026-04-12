@@ -8,6 +8,8 @@
   "command.ollama.error.http_with_detail": "HTTP 错误 %d: %s",
   "command.ollama.error.no_model_selected": "未选择模型！使用 /ollama model <名称>",
   "command.ollama.error.history_clear_failed": "清除聊天历史失败。",
+  "command.ollama.error.search_not_supported": "在线搜索仅支持 Ollama 原生 API，当前为 OpenAI 兼容模式。",
+  "command.ollama.error.no_response_id": "无 LM Studio 对话上下文，将开始新对话。",
   "command.ollama.status.api_status": "当前 API 地址: %s",
   "command.ollama.status.api_set": "API 地址已设置为: %s",
   "command.ollama.status.api_set_with_provider": "API 地址已设置为: %s (提供者: %s)",
@@ -23,6 +25,7 @@
   "command.ollama.status.ps_success": "运行中的模型列表获取成功。",
   "command.ollama.status.model_set": "已设置活动模型为: %s",
   "command.ollama.status.models_refreshed": "模型已刷新。",
+  "command.ollama.status.models_refreshed_api": "已从 API 刷新模型列表，共 %d 个模型。",
   "command.ollama.status.think_status": "深度思考: %s",
   "command.ollama.status.think_enabled": "深度思考已开启。",
   "command.ollama.status.think_disabled": "深度思考已关闭。",
@@ -34,6 +37,6 @@
   "command.ollama.status.history_count": "聊天历史记录数: %d",
   "command.ollama.status.history_cleared": "聊天历史已清除。",
   "modmenu.nameTranslation.ollamachat": "OllamaChat",
-  "modmenu.descriptionTranslation.ollamachat": "在 Minecraft 中与 AI 模型对话，支持 Ollama 和 OpenAI 兼容接口",
+  "modmenu.descriptionTranslation.ollamachat": "在 Minecraft 中与 AI 模型对话，支持 Ollama、OpenAI 兼容接口和 LM Studio",
   "modmenu.afadian": "爱发电"
 }

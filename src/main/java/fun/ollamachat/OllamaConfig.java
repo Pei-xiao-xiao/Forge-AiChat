@@ -8,10 +8,12 @@ public class OllamaConfig {
      * API 提供者类型
      * OLLAMA: Ollama 原生 /api/generate 格式
      * OPENAI: OpenAI 兼容 /v1/chat/completions 格式（DeepSeek、智谱、通义千问等）
+     * LMSTUDIO: LM Studio /api/v1/chat 有状态格式（通过 response_id 管理上下文）
      */
     public enum ApiProvider {
         OLLAMA,
-        OPENAI
+        OPENAI,
+        LMSTUDIO
     }
 
     private static ApiProvider apiProvider = ApiProvider.OLLAMA;
@@ -40,12 +42,22 @@ public class OllamaConfig {
     /**
      * 自动检测 API 提供者类型
      * 根据 URL 路径自动判断：
+     * - 包含 /api/v1/chat → LMSTUDIO（LM Studio 有状态接口）
+     * - 包含 /v1/responses → LMSTUDIO（LM Studio OpenAI Responses API 兼容）
      * - 包含 /v1/ 或 /chat/completions → OPENAI
      * - 其他 → OLLAMA
      */
     public static ApiProvider detectProvider(String url) {
         if (url == null) return ApiProvider.OLLAMA;
         String lower = url.toLowerCase();
+        // LM Studio 的有状态接口：/api/v1/chat
+        if (lower.contains("/api/v1/chat")) {
+            return ApiProvider.LMSTUDIO;
+        }
+        // LM Studio 的 OpenAI Responses API 兼容接口：/v1/responses
+        if (lower.contains("/v1/responses")) {
+            return ApiProvider.LMSTUDIO;
+        }
         if (lower.contains("/v1/") || lower.contains("/chat/completions")) {
             return ApiProvider.OPENAI;
         }
@@ -118,7 +130,7 @@ public class OllamaConfig {
      * 判断当前是否需要 API Key
      */
     public static boolean requiresApiKey() {
-        return apiProvider == ApiProvider.OPENAI;
+        return apiProvider == ApiProvider.OPENAI || apiProvider == ApiProvider.LMSTUDIO;
     }
 
     /**

@@ -41,8 +41,19 @@ public class OllamaCommandHandler {
                 // list - 列出模型
                 .then(ClientCommandManager.literal("list")
                         .executes(context -> {
-                            COMMAND_EXECUTOR.submit(() -> listModels(context.getSource()));
-                            context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_running"));
+                            COMMAND_EXECUTOR.submit(() -> {
+                                // 先尝试从 API 获取模型列表
+                                int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
+                                if (count > 0) {
+                                    for (String model : fun.ollamachat.OllamaModelManager.getCachedModels()) {
+                                        context.getSource().sendFeedback(Text.literal("  - " + model));
+                                    }
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.list_success"));
+                                } else {
+                                    // API 获取失败，回退到 ollama list 命令行
+                                    listModels(context.getSource());
+                                }
+                            });
                             return 1;
                         }))
                 // serve - 启动服务
@@ -63,8 +74,14 @@ public class OllamaCommandHandler {
                 .then(ClientCommandManager.literal("refresh")
                         .executes(context -> {
                             COMMAND_EXECUTOR.submit(() -> {
-                                fun.ollamachat.OllamaModelManager.updateModelsFromSystem();
-                                context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed"));
+                                int count = fun.ollamachat.OllamaModelManager.fetchModelsFromApi();
+                                if (count >= 0) {
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed_api", count));
+                                } else {
+                                    // API 获取失败，回退到命令行方式
+                                    fun.ollamachat.OllamaModelManager.updateModelsFromSystem();
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.models_refreshed"));
+                                }
                             });
                             return 1;
                         }))
@@ -114,6 +131,12 @@ public class OllamaCommandHandler {
                                 .executes(context -> {
                                     fun.ollamachat.OllamaConfig.setApiProvider(fun.ollamachat.OllamaConfig.ApiProvider.OPENAI);
                                     context.getSource().sendFeedback(Text.translatable("command.ollama.status.provider_set", "OpenAI Compatible"));
+                                    return 1;
+                                }))
+                        .then(ClientCommandManager.literal("lmstudio")
+                                .executes(context -> {
+                                    fun.ollamachat.OllamaConfig.setApiProvider(fun.ollamachat.OllamaConfig.ApiProvider.LMSTUDIO);
+                                    context.getSource().sendFeedback(Text.translatable("command.ollama.status.provider_set", "LM Studio"));
                                     return 1;
                                 })))
                 // key - 设置 API Key
@@ -194,6 +217,8 @@ public class OllamaCommandHandler {
                                 .executes(context -> {
                                     UUID playerUuid = MinecraftClient.getInstance().player.getUuid();
                                     boolean success = fun.ollamachat.OllamaChatHistory.clearHistory(playerUuid);
+                                    // 同时清除 LM Studio 的 response_id
+                                    fun.ollamachat.OllamaChatHistory.clearResponseId(playerUuid);
                                     if (success) {
                                         context.getSource().sendFeedback(Text.translatable("command.ollama.status.history_cleared"));
                                     } else {

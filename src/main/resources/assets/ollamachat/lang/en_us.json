@@ -8,6 +8,8 @@
   "command.ollama.error.http_with_detail": "HTTP error %d: %s",
   "command.ollama.error.no_model_selected": "No model selected! Use /ollama model <name>",
   "command.ollama.error.history_clear_failed": "Failed to clear chat history.",
+  "command.ollama.error.search_not_supported": "Online search is only supported with Ollama native API. Current mode: OpenAI compatible.",
+  "command.ollama.error.no_response_id": "No LM Studio conversation context. Starting a new conversation.",
   "command.ollama.status.api_status": "Current API URL: %s",
   "command.ollama.status.api_set": "API URL set to: %s",
   "command.ollama.status.api_set_with_provider": "API URL set to: %s (Provider: %s)",
@@ -23,6 +25,7 @@
   "command.ollama.status.ps_success": "Running models listed successfully.",
   "command.ollama.status.model_set": "Active model set to: %s",
   "command.ollama.status.models_refreshed": "Models refreshed.",
+  "command.ollama.status.models_refreshed_api": "Models refreshed from API. Found %d models.",
   "command.ollama.status.think_status": "Deep thinking: %s",
   "command.ollama.status.think_enabled": "Deep thinking enabled.",
   "command.ollama.status.think_disabled": "Deep thinking disabled.",
@@ -34,6 +37,6 @@
   "command.ollama.status.history_count": "Chat history records: %d",
   "command.ollama.status.history_cleared": "Chat history cleared.",
   "modmenu.nameTranslation.ollamachat": "OllamaChat",
-  "modmenu.descriptionTranslation.ollamachat": "Chat with AI models in Minecraft. Supports Ollama and OpenAI-compatible APIs.",
+  "modmenu.descriptionTranslation.ollamachat": "Chat with AI models in Minecraft. Supports Ollama, OpenAI-compatible APIs, and LM Studio.",
   "modmenu.afadian": "afadian"
 }

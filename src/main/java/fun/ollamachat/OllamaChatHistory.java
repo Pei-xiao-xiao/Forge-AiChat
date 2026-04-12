@@ -18,11 +18,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class OllamaChatHistory {
     private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Object FILE_LOCK = new Object();
+    /**
+     * LM Studio 有状态 API：存储每个玩家的最近 response_id
+     * 用于在后续请求中传递 previous_response_id 实现上下文延续
+     */
+    private static final ConcurrentHashMap<UUID, String> playerResponseIds = new ConcurrentHashMap<>();
 
     /**
      * 单条聊天记录
@@ -137,5 +143,30 @@ public class OllamaChatHistory {
      */
     public static int getHistoryCount(UUID playerUuid) {
         return getHistory(playerUuid).size();
+    }
+
+    /**
+     * 获取玩家在 LM Studio 有状态 API 中的最近 response_id
+     * 用于在后续请求中传递 previous_response_id 实现上下文延续
+     */
+    public static String getResponseId(UUID playerUuid) {
+        return playerResponseIds.get(playerUuid);
+    }
+
+    /**
+     * 设置玩家在 LM Studio 有状态 API 中的 response_id
+     */
+    public static void setResponseId(UUID playerUuid, String responseId) {
+        if (responseId != null && !responseId.isEmpty()) {
+            playerResponseIds.put(playerUuid, responseId);
+        }
+    }
+
+    /**
+     * 清除玩家的 response_id
+     * 在执行 /ollama history clear 时调用
+     */
+    public static void clearResponseId(UUID playerUuid) {
+        playerResponseIds.remove(playerUuid);
     }
 }
