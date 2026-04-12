@@ -74,8 +74,11 @@ public class OllamaHttpClient {
             timeoutSeconds = OllamaModelManager.isThinkEnabled() ? 180 : 60;
         }
 
+        // 推导实际的聊天请求 URL
+        String chatUrl = resolveChatUrl(OllamaConfig.getApiUrl(), provider);
+
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(OllamaConfig.getApiUrl()))
+                .uri(URI.create(chatUrl))
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8));
@@ -134,6 +137,38 @@ public class OllamaHttpClient {
                     }
                 });
         });
+    }
+
+    /**
+     * 根据 API URL 和 Provider 类型推导实际的聊天请求 URL
+     * 处理用户可能输入纯基础地址（如 http://127.0.0.1:1234）的情况
+     */
+    private static String resolveChatUrl(String apiUrl, OllamaConfig.ApiProvider provider) {
+        if (apiUrl == null || apiUrl.isEmpty()) return apiUrl;
+        String lower = apiUrl.toLowerCase();
+
+        if (provider == OllamaConfig.ApiProvider.LMSTUDIO) {
+            // LM Studio 已经包含完整路径 → 直接使用
+            if (lower.contains("/api/v1/") || lower.contains("/v1/responses") || lower.contains("/v1/chat/completions")) {
+                return apiUrl;
+            }
+            // 纯基础地址 → 拼接 LM Studio 原生 /api/v1/chat
+            return apiUrl.replaceAll("/+$", "") + "/api/v1/chat";
+        } else if (provider == OllamaConfig.ApiProvider.OPENAI) {
+            // OpenAI 兼容已包含完整路径 → 直接使用
+            if (lower.contains("/v1/") || lower.contains("/chat/completions")) {
+                return apiUrl;
+            }
+            // 纯基础地址 → 拼接 /v1/chat/completions
+            return apiUrl.replaceAll("/+$", "") + "/v1/chat/completions";
+        } else {
+            // Ollama 已包含 /api/ 路径 → 直接使用
+            if (lower.contains("/api/")) {
+                return apiUrl;
+            }
+            // 纯基础地址 → 拼接 /api/generate
+            return apiUrl.replaceAll("/+$", "") + "/api/generate";
+        }
     }
 
     /**

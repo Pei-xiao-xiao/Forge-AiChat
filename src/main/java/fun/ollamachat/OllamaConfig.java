@@ -58,6 +58,7 @@ public class OllamaConfig {
      * - 包含 /api/v1/chat → LMSTUDIO（LM Studio 有状态接口）
      * - 包含 /v1/responses → LMSTUDIO（LM Studio OpenAI Responses API 兼容）
      * - 包含 /v1/ 或 /chat/completions → OPENAI
+     * - 端口 1234 且无特征路径 → LMSTUDIO（LM Studio 默认端口）
      * - 其他 → OLLAMA
      */
     public static ApiProvider detectProvider(String url) {
@@ -73,6 +74,10 @@ public class OllamaConfig {
         }
         if (lower.contains("/v1/") || lower.contains("/chat/completions")) {
             return ApiProvider.OPENAI;
+        }
+        // 纯基础地址（如 http://127.0.0.1:1234），通过端口特征检测 LM Studio
+        if (lower.matches("^https?://[^/]+:1234/?$")) {
+            return ApiProvider.LMSTUDIO;
         }
         return ApiProvider.OLLAMA;
     }

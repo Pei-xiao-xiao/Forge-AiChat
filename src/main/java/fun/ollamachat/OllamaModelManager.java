@@ -25,7 +25,9 @@ public class OllamaModelManager {
     private static volatile boolean thinkEnabled = false;
     private static volatile boolean searchEnabled = false;
     private static final int MODEL_UPDATE_INTERVAL = 300;
-    private static final HttpClient modelHttpClient = HttpClient.newHttpClient();
+    private static final HttpClient modelHttpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     public static List<String> getCachedModels() {
         return new ArrayList<>(cachedModels);
@@ -35,7 +37,7 @@ public class OllamaModelManager {
      * 通过 HTTP API 获取模型列表
      * Ollama: GET /api/tags → {"models": [{"name": "..."}]}
      * OpenAI 兼容: GET /v1/models → {"data": [{"id": "..."}]}
-     * LM Studio: GET /v1/models → {"data": [{"id": "..."}]}
+     * LM Studio: GET /api/v1/models → {"data": [{"id": "..."}]}
      * 
      * @return 获取到的模型数量，-1 表示失败
      */
@@ -50,47 +52,66 @@ public class OllamaModelManager {
                 return -1;
             }
             
+            LOGGER.info("正在获取模型列表，Provider: {}, API URL: {}", provider, apiUrl);
+            
             if (provider == OllamaConfig.ApiProvider.LMSTUDIO) {
-                // LM Studio：推导出 /v1/models 端点
-                // 例如 http://localhost:1234/api/v1/chat → http://localhost:1234/v1/models
-                // 例如 http://localhost:1234/v1/responses → http://localhost:1234/v1/models
-                int apiV1Index = apiUrl.indexOf("/api/v1/");
-                if (apiV1Index >= 0) {
-                    modelsUrl = apiUrl.substring(0, apiV1Index) + "/v1/models";
+                // LM Studio：推导出 /api/v1/models 端点
+                // 例如 http://localhost:1234/api/v1/chat → http://localhost:1234/api/v1/models
+                // 例如 http://localhost:1234/v1/responses → http://localhost:1234/api/v1/models（LM Studio 原生优先）
+                // 例如 http://localhost:1234 → http://localhost:1234/api/v1/models
+                if (apiUrl.contains("/api/v1/")) {
+                    modelsUrl = apiUrl.replaceAll("/api/v1/[^/]*$", "/api/v1/models");
                 } else if (apiUrl.contains("/v1/")) {
-                    int v1Index = apiUrl.indexOf("/v1/");
-                    modelsUrl = apiUrl.substring(0, v1Index) + "/v1/models";
+                    // /v1/responses 或 /v1/chat/completions → 使用 LM Studio 原生 /api/v1/models
+                    String base = apiUrl.replaceAll("/v1/.*$", "");
+                    modelsUrl = base + "/api/v1/models";
+                } else if (apiUrl.matches("^https?://[^/]+/?$")) {
+                    // 纯基础地址（如 http://127.0.0.1:1234 或 http://127.0.0.1:1234/）
+                    modelsUrl = apiUrl.replaceAll("/+$", "") + "/api/v1/models";
                 } else {
-                    // 无法推导，拼接默认路径
-                    modelsUrl = apiUrl.replaceAll("/[^/]*$", "") + "/v1/models";
+                    // 其他情况：提取 base URL 然后拼接
+                    String base = apiUrl.replaceAll("(^https?://[^/]+).*$", "$1");
+                    modelsUrl = base + "/api/v1/models";
                 }
             } else if (provider == OllamaConfig.ApiProvider.OPENAI) {
                 // OpenAI 兼容接口：推导出 /v1/models 端点
                 // 例如 https://api.deepseek.com/v1/chat/completions → https://api.deepseek.com/v1/models
                 // 例如 http://localhost:1234/v1/chat/completions → http://localhost:1234/v1/models
+                // 例如 https://api.openai.com → https://api.openai.com/v1/models
                 int v1Index = apiUrl.indexOf("/v1/");
                 if (v1Index >= 0) {
                     modelsUrl = apiUrl.substring(0, v1Index) + "/v1/models";
                 } else if (apiUrl.contains("/chat/completions")) {
                     modelsUrl = apiUrl.replace("/chat/completions", "/models");
+                } else if (apiUrl.matches("^https?://[^/]+/?$")) {
+                    // 纯基础地址
+                    modelsUrl = apiUrl.replaceAll("/+$", "") + "/v1/models";
                 } else {
-                    // 无法推导，拼接默认路径
-                    modelsUrl = apiUrl.replaceAll("/[^/]*$", "") + "/v1/models";
+                    // 无法推导，提取 base 拼接默认路径
+                    String base = apiUrl.replaceAll("(^https?://[^/]+).*$", "$1");
+                    modelsUrl = base + "/v1/models";
                 }
             } else {
                 // Ollama 原生：推导出 /api/tags 端点
                 // 例如 http://localhost:11434/api/generate → http://localhost:11434/api/tags
+                // 例如 http://localhost:11434 → http://localhost:11434/api/tags
                 if (apiUrl.contains("/api/")) {
                     modelsUrl = apiUrl.replaceAll("/api/[^/]*$", "/api/tags");
+                } else if (apiUrl.matches("^https?://[^/]+/?$")) {
+                    // 纯基础地址
+                    modelsUrl = apiUrl.replaceAll("/+$", "") + "/api/tags";
                 } else {
-                    // URL 不含 /api/，拼接默认路径
-                    modelsUrl = apiUrl.replaceAll("/[^/]*$", "") + "/api/tags";
+                    // URL 不含 /api/，提取 base 拼接默认路径
+                    String base = apiUrl.replaceAll("(^https?://[^/]+).*$", "$1");
+                    modelsUrl = base + "/api/tags";
                 }
             }
             
+            LOGGER.info("推导出的模型列表 URL: {}", modelsUrl);
+            
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(modelsUrl))
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(20))
                     .GET();
             
             // OpenAI/LM Studio 兼容接口需要 Authorization header
@@ -102,7 +123,10 @@ public class OllamaModelManager {
             HttpRequest request = requestBuilder.build();
             HttpResponse<String> response = modelHttpClient.send(request, HttpResponse.BodyHandlers.ofString());
             
+            LOGGER.info("模型列表请求 URL: {}, 响应状态码：{}", modelsUrl, response.statusCode());
+            
             if (response.statusCode() != 200) {
+                LOGGER.error("获取模型列表失败，状态码：{}, 响应内容：{}", response.statusCode(), response.body());
                 return -1;
             }
             
@@ -135,8 +159,25 @@ public class OllamaModelManager {
             
             cachedModels.clear();
             cachedModels.addAll(newModels);
+            LOGGER.info("成功获取 {} 个模型", newModels.size());
             return newModels.size();
+        } catch (java.net.http.HttpTimeoutException e) {
+            LOGGER.error("获取模型列表超时（20 秒），请检查：");
+            LOGGER.error("1. LM Studio 是否已启动并正在运行？");
+            LOGGER.error("2. API 地址是否正确？当前为：{}", OllamaConfig.getApiUrl());
+            LOGGER.error("3. 防火墙是否阻止了连接？");
+            LOGGER.error("4. 如果是远程服务器，网络连接是否正常？");
+            return -1;
+        } catch (java.net.ConnectException e) {
+            LOGGER.error("无法连接到 API 服务器，请检查：");
+            LOGGER.error("1. LM Studio 是否已启动？");
+            LOGGER.error("2. API 地址和端口是否正确？当前为：{}", OllamaConfig.getApiUrl());
+            LOGGER.error("3. LM Studio 的服务器地址是否设置为监听所有接口（0.0.0.0）？");
+            return -1;
         } catch (Exception e) {
+            LOGGER.error("获取模型列表时发生异常：{}", e.getMessage());
+            LOGGER.error("API URL: {}", OllamaConfig.getApiUrl());
+            LOGGER.error("异常类型：{}", e.getClass().getSimpleName());
             return -1;
         }
     }
