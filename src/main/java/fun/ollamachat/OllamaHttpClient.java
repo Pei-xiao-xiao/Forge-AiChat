@@ -331,15 +331,12 @@ public class OllamaHttpClient {
      * 鼠标悬停时显示思考过程
      */
     public static Text buildAIText(AIResponse aiResponse) {
-        Text mainText = Text.literal("[AI] " + aiResponse.response);
         if (aiResponse.hasThinking()) {
             Text thinkingText = Text.literal(aiResponse.thinking);
-            mainText.getStyle().withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText));
-            // 需要用 withStyle 来应用 hoverEvent
             return Text.literal("[AI] " + aiResponse.response)
                     .styled(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText)));
         }
-        return mainText;
+        return Text.literal("[AI] " + aiResponse.response);
     }
 
     public static int getActiveRequests() {
