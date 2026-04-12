@@ -1,10 +1,10 @@
-package fun.ollamachat.server;
+package fun.aichat.server;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 
-public class OllamachatServer implements DedicatedServerModInitializer {
+public class AichatServer implements DedicatedServerModInitializer {
 
     @Override
     public void onInitializeServer() {

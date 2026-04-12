@@ -1,21 +1,61 @@
-The MIT License (MIT)
+AiChat 模组许可证 (AiChat Mod License)
 
-Copyright (c) 2025 王兴家
+特此免费授予任何获得本软件及相关文档文件（以下简称"软件"）副本的人使用、复制、修改、合并、发布、分发本软件的权利，但须遵守以下限制条件：
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. 禁止商业销售
+   本软件不得用于任何商业销售目的。不得将本软件或其衍生作品以售卖、收费下载或其他商业交易形式提供给第三方。
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+2. 允许自由分发
+   允许免费分发本软件及其衍生作品，包括但不限于：
+   - 在 Minecraft 模组网站、论坛等平台免费发布
+   - 通过网盘、代码托管平台等渠道免费分享
+   - 在整合包中包含并免费分发
+   - 其他非商业性质的分发行为
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+3. 保留版权声明
+   软件的所有副本或重要部分必须包含上述版权声明和本许可证声明。
+
+4. 修改声明
+   如果您修改了本软件，必须在显著位置标明修改内容、修改日期和修改者信息。
+
+5. 免责声明
+   本软件按"原样"提供，不提供任何形式的明示或暗示保证，包括但不限于适销性、特定用途适用性和不侵权的保证。在任何情况下，作者或版权持有者不对因使用本软件而产生的任何索赔、损害或其他责任负责，无论是在合同诉讼、侵权诉讼还是其他诉讼中。
+
+6. 衍生作品
+   基于本软件的衍生作品必须遵循本许可证的相同条款，特别是禁止商业销售的限制。
+
+违反上述任何条件的行为将导致授权自动终止。
+
+对于本许可证的任何疑问或商业授权请求，请联系版权持有者。
+
+---
+
+AiChat Mod License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, subject to the following conditions:
+
+1. No Commercial Sale
+   The Software shall not be used for any commercial sale purposes. The Software or its derivative works shall not be provided to third parties in the form of sale, paid download, or other commercial transactions.
+
+2. Free Distribution Allowed
+   Free distribution of the Software and its derivative works is permitted, including but not limited to:
+   - Free publishing on Minecraft mod websites, forums, and other platforms
+   - Free sharing through cloud storage, code hosting platforms, and other channels
+   - Inclusion and free distribution in modpacks
+   - Other non-commercial distribution activities
+
+3. Retain Copyright Notice
+   All copies or substantial portions of the Software must include the above copyright notice and this license statement.
+
+4. Modification Notice
+   If you modify the Software, you must clearly indicate the modifications, modification date, and modifier information in a prominent location.
+
+5. Disclaimer
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. Derivative Works
+   Derivative works based on the Software must follow the same terms of this license, especially the restriction on commercial sale.
+
+Violation of any of the above conditions will result in automatic termination of this license.
+
+For any questions about this license or requests for commercial licensing, please contact the copyright holder.

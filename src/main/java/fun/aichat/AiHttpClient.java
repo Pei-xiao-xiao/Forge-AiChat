@@ -1,4 +1,4 @@
-package fun.ollamachat;
+package fun.aichat;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -20,9 +20,12 @@ import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class OllamaHttpClient {
-    private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
-    private static final HttpClient httpClient = HttpClient.newHttpClient();
+public class AiHttpClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger("AiChat");
+    private static final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
     private static final AtomicInteger activeRequests = new AtomicInteger(0);
     private static final ExecutorService requestExecutor = Executors.newCachedThreadPool();
 
@@ -45,37 +48,47 @@ public class OllamaHttpClient {
 
     /**
      * 异步发送 AI 请求，结果通过 callback 返回
-     * 根据 OllamaConfig.getApiProvider() 自动选择请求格式：
+     * 根据 AiConfig.getApiProvider() 自动选择请求格式：
      * - OLLAMA: /api/generate 格式
      * - OPENAI: /v1/chat/completions 格式
      * - LMSTUDIO: /api/v1/chat 有状态格式（通过 response_id 管理上下文）
      */
     public static void handleAIRequestAsync(String userInput, UUID playerUuid, AIResponseCallback callback) {
-        String currentModel = OllamaModelManager.getCurrentModel();
+        String currentModel = AiModelManager.getCurrentModel();
         if (currentModel.isEmpty()) {
-            callback.onError(Text.translatable("command.ollama.error.no_model_selected").getString());
+            callback.onError(Text.translatable("command.ai.error.no_model_selected").getString());
             return;
         }
 
         activeRequests.incrementAndGet();
 
-        OllamaConfig.ApiProvider provider = OllamaConfig.getApiProvider();
+        AiConfig.ApiProvider provider = AiConfig.getApiProvider();
         String requestBody;
         int timeoutSeconds;
 
-        if (provider == OllamaConfig.ApiProvider.LMSTUDIO) {
+        // 判断 LM Studio 是否使用原生有状态 API（/api/v1/chat 或 /v1/responses）
+        // 如果是纯基础地址，resolveChatUrl 会推导到 /v1/chat/completions，应使用 OpenAI 格式
+        boolean lmStudioUseStatefulApi = false;
+        if (provider == AiConfig.ApiProvider.LMSTUDIO) {
+            String apiUrl = AiConfig.getApiUrl().toLowerCase();
+            lmStudioUseStatefulApi = apiUrl.contains("/api/v1/") || apiUrl.contains("/v1/responses");
+        }
+
+        if (provider == AiConfig.ApiProvider.LMSTUDIO && lmStudioUseStatefulApi) {
             requestBody = buildLMStudioRequestBody(userInput, playerUuid, currentModel);
-            timeoutSeconds = OllamaModelManager.isThinkEnabled() ? 180 : 60;
-        } else if (provider == OllamaConfig.ApiProvider.OPENAI) {
+            timeoutSeconds = AiModelManager.isThinkEnabled() ? 180 : 60;
+        } else if (provider == AiConfig.ApiProvider.OPENAI || 
+                   (provider == AiConfig.ApiProvider.LMSTUDIO && !lmStudioUseStatefulApi)) {
+            // LM Studio 使用 OpenAI 兼容端点时，也用 OpenAI 格式构建请求
             requestBody = buildOpenAIRequestBody(userInput, playerUuid, currentModel);
-            timeoutSeconds = OllamaModelManager.isThinkEnabled() ? 180 : 60;
+            timeoutSeconds = AiModelManager.isThinkEnabled() ? 180 : 60;
         } else {
             requestBody = buildOllamaRequestBody(userInput, playerUuid, currentModel);
-            timeoutSeconds = OllamaModelManager.isThinkEnabled() ? 180 : 60;
+            timeoutSeconds = AiModelManager.isThinkEnabled() ? 180 : 60;
         }
 
         // 推导实际的聊天请求 URL
-        String chatUrl = resolveChatUrl(OllamaConfig.getApiUrl(), provider);
+        String chatUrl = resolveChatUrl(AiConfig.getApiUrl(), provider);
 
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(chatUrl))
@@ -84,13 +97,14 @@ public class OllamaHttpClient {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8));
 
         // 第三方 API 需要 Authorization header
-        if ((provider == OllamaConfig.ApiProvider.OPENAI || provider == OllamaConfig.ApiProvider.LMSTUDIO)
-                && !OllamaConfig.getApiKey().isEmpty()) {
-            requestBuilder.header("Authorization", "Bearer " + OllamaConfig.getApiKey());
+        if ((provider == AiConfig.ApiProvider.OPENAI || provider == AiConfig.ApiProvider.LMSTUDIO)
+                && !AiConfig.getApiKey().isEmpty()) {
+            requestBuilder.header("Authorization", "Bearer " + AiConfig.getApiKey());
         }
 
         HttpRequest request = requestBuilder.build();
-        final OllamaConfig.ApiProvider finalProvider = provider;
+        final AiConfig.ApiProvider finalProvider = provider;
+        final boolean finalLmStudioStateful = lmStudioUseStatefulApi;
 
         requestExecutor.submit(() -> {
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
@@ -99,22 +113,25 @@ public class OllamaHttpClient {
                         if (throwable != null) {
                             LOGGER.error("AI request failed", throwable);
                             if (throwable instanceof TimeoutException) {
-                                callback.onError(Text.translatable("command.ollama.error.timeout").getString());
+                                callback.onError(Text.translatable("command.ai.error.timeout").getString());
                             } else {
-                                callback.onError(Text.translatable("command.ollama.error.generic").getString());
+                                callback.onError(Text.translatable("command.ai.error.generic").getString());
                             }
                         } else if (response.statusCode() == 200) {
                             AIResponse aiResponse;
-                            if (finalProvider == OllamaConfig.ApiProvider.LMSTUDIO) {
+                            if (finalProvider == AiConfig.ApiProvider.LMSTUDIO && finalLmStudioStateful) {
+                                // LM Studio 原生有状态 API（/api/v1/chat 或 /v1/responses）
                                 aiResponse = parseLMStudioResponse(response.body(), playerUuid);
-                            } else if (finalProvider == OllamaConfig.ApiProvider.OPENAI) {
+                            } else if (finalProvider == AiConfig.ApiProvider.OPENAI || 
+                                       (finalProvider == AiConfig.ApiProvider.LMSTUDIO && !finalLmStudioStateful)) {
+                                // OpenAI 兼容格式，或 LM Studio 使用 OpenAI 兼容端点
                                 aiResponse = parseOpenAIResponse(response.body());
                             } else {
                                 aiResponse = parseResponse(response.body());
                             }
                             // 记录到聊天历史
-                            OllamaChatHistory.addMessage(playerUuid, "player", userInput);
-                            OllamaChatHistory.addMessage(playerUuid, "ai", aiResponse.response);
+                            AiChatHistory.addMessage(playerUuid, "player", userInput);
+                            AiChatHistory.addMessage(playerUuid, "ai", aiResponse.response);
                             callback.onSuccess(aiResponse);
                         } else {
                             // 尝试提取错误信息
@@ -127,9 +144,9 @@ public class OllamaHttpClient {
                                 }
                             } catch (Exception ignored) {}
                             if (!errorDetail.isEmpty()) {
-                                callback.onError(Text.translatable("command.ollama.error.http_with_detail", response.statusCode(), errorDetail).getString());
+                                callback.onError(Text.translatable("command.ai.error.http_with_detail", response.statusCode(), errorDetail).getString());
                             } else {
-                                callback.onError(Text.translatable("command.ollama.error.http_code", response.statusCode()).getString());
+                                callback.onError(Text.translatable("command.ai.error.http_code", response.statusCode()).getString());
                             }
                         }
                     } finally {
@@ -143,18 +160,22 @@ public class OllamaHttpClient {
      * 根据 API URL 和 Provider 类型推导实际的聊天请求 URL
      * 处理用户可能输入纯基础地址（如 http://127.0.0.1:1234）的情况
      */
-    private static String resolveChatUrl(String apiUrl, OllamaConfig.ApiProvider provider) {
+    private static String resolveChatUrl(String apiUrl, AiConfig.ApiProvider provider) {
         if (apiUrl == null || apiUrl.isEmpty()) return apiUrl;
         String lower = apiUrl.toLowerCase();
 
-        if (provider == OllamaConfig.ApiProvider.LMSTUDIO) {
-            // LM Studio 已经包含完整路径 → 直接使用
-            if (lower.contains("/api/v1/") || lower.contains("/v1/responses") || lower.contains("/v1/chat/completions")) {
+        if (provider == AiConfig.ApiProvider.LMSTUDIO) {
+            // LM Studio 原生有状态 API → 直接使用
+            if (lower.contains("/api/v1/") || lower.contains("/v1/responses")) {
                 return apiUrl;
             }
-            // 纯基础地址 → 拼接 LM Studio 原生 /api/v1/chat
-            return apiUrl.replaceAll("/+$", "") + "/api/v1/chat";
-        } else if (provider == OllamaConfig.ApiProvider.OPENAI) {
+            // OpenAI 兼容端点 → 直接使用
+            if (lower.contains("/v1/chat/completions")) {
+                return apiUrl;
+            }
+            // 纯基础地址 → 优先使用 OpenAI 兼容端点（最通用，所有 LM Studio 版本支持）
+            return apiUrl.replaceAll("/+$", "") + "/v1/chat/completions";
+        } else if (provider == AiConfig.ApiProvider.OPENAI) {
             // OpenAI 兼容已包含完整路径 → 直接使用
             if (lower.contains("/v1/") || lower.contains("/chat/completions")) {
                 return apiUrl;
@@ -183,10 +204,10 @@ public class OllamaHttpClient {
         requestJson.addProperty("stream", false);
         requestJson.addProperty("num_predict", 60);
 
-        if (OllamaModelManager.isThinkEnabled()) {
+        if (AiModelManager.isThinkEnabled()) {
             requestJson.addProperty("think", true);
         }
-        if (OllamaModelManager.isSearchEnabled()) {
+        if (AiModelManager.isSearchEnabled()) {
             requestJson.addProperty("search", true);
         }
 
@@ -206,10 +227,10 @@ public class OllamaHttpClient {
         JsonArray messages = new JsonArray();
 
         // 添加历史上下文
-        int contextRounds = OllamaConfig.getContextRounds();
+        int contextRounds = AiConfig.getContextRounds();
         if (contextRounds > 0) {
-            List<OllamaChatHistory.ChatRecord> history = OllamaChatHistory.getRecentHistory(playerUuid, contextRounds * 2);
-            for (OllamaChatHistory.ChatRecord record : history) {
+            List<AiChatHistory.ChatRecord> history = AiChatHistory.getRecentHistory(playerUuid, contextRounds * 2);
+            for (AiChatHistory.ChatRecord record : history) {
                 JsonObject msg = new JsonObject();
                 if ("player".equals(record.role)) {
                     msg.addProperty("role", "user");
@@ -232,7 +253,7 @@ public class OllamaHttpClient {
         // 在线搜索：OpenAI 兼容接口中，通义千问用 "enable_search": true
         // 智谱 GLM 用 tools 参数，DeepSeek 等也支持类似参数
         // 这里使用最通用的 enable_search 格式，不支持的 API 会忽略该字段
-        if (OllamaModelManager.isSearchEnabled()) {
+        if (AiModelManager.isSearchEnabled()) {
             requestJson.addProperty("enable_search", true);
         }
 
@@ -253,13 +274,13 @@ public class OllamaHttpClient {
         requestJson.addProperty("input", userInput);
 
         // 如果有之前的 response_id，传递 previous_response_id 继续对话
-        String previousResponseId = OllamaChatHistory.getResponseId(playerUuid);
+        String previousResponseId = AiChatHistory.getResponseId(playerUuid);
         if (previousResponseId != null && !previousResponseId.isEmpty()) {
             requestJson.addProperty("previous_response_id", previousResponseId);
         }
 
-        String apiUrl = OllamaConfig.getApiUrl().toLowerCase();
-        boolean isThinkEnabled = OllamaModelManager.isThinkEnabled();
+        String apiUrl = AiConfig.getApiUrl().toLowerCase();
+        boolean isThinkEnabled = AiModelManager.isThinkEnabled();
 
         if (apiUrl.contains("/v1/responses")) {
             // /v1/responses 端点：reasoning 是对象 {effort: "high"}
@@ -284,19 +305,19 @@ public class OllamaHttpClient {
      * 构建带历史上下文的 prompt（Ollama 格式用）
      */
     private static String buildPromptWithContext(String userInput, UUID playerUuid) {
-        int contextRounds = OllamaConfig.getContextRounds();
+        int contextRounds = AiConfig.getContextRounds();
         if (contextRounds <= 0) {
             return userInput;
         }
 
-        List<OllamaChatHistory.ChatRecord> history = OllamaChatHistory.getRecentHistory(playerUuid, contextRounds * 2);
+        List<AiChatHistory.ChatRecord> history = AiChatHistory.getRecentHistory(playerUuid, contextRounds * 2);
         if (history.isEmpty()) {
             return userInput;
         }
 
         StringBuilder promptBuilder = new StringBuilder();
         promptBuilder.append("The following is a conversation history:\n\n");
-        for (OllamaChatHistory.ChatRecord record : history) {
+        for (AiChatHistory.ChatRecord record : history) {
             if ("player".equals(record.role)) {
                 promptBuilder.append("[Player]: ").append(record.content).append("\n");
             } else {
@@ -342,7 +363,7 @@ public class OllamaHttpClient {
 
             return new AIResponse(responseText, thinkingText);
         } catch (Exception e) {
-            return new AIResponse(Text.translatable("command.ollama.error.parse_failed").getString(), null);
+            return new AIResponse(Text.translatable("command.ai.error.parse_failed").getString(), null);
         }
     }
 
@@ -404,7 +425,7 @@ public class OllamaHttpClient {
 
             return new AIResponse(responseText, thinkingText);
         } catch (Exception e) {
-            return new AIResponse(Text.translatable("command.ollama.error.parse_failed").getString(), null);
+            return new AIResponse(Text.translatable("command.ai.error.parse_failed").getString(), null);
         }
     }
 
@@ -412,7 +433,7 @@ public class OllamaHttpClient {
      * 解析 LM Studio 有状态 API 响应 (/api/v1/chat 或 /v1/responses)
      * /api/v1/chat 格式：{"output": [{"type": "message", "content": "..."}], "response_id": "resp_xxx"}
      * /v1/responses 格式：{"output": [{"type": "message", "content": "..."}, {"type": "reasoning", "summary": [{"type": "summary_text", "text": "..."}]}], "id": "resp_xxx"}
-     * response_id 存储到 OllamaChatHistory 用于后续请求的 previous_response_id
+     * response_id 存储到 AiChatHistory 用于后续请求的 previous_response_id
      */
     public static AIResponse parseLMStudioResponse(String responseBody, UUID playerUuid) {
         try {
@@ -429,7 +450,7 @@ public class OllamaHttpClient {
                 responseId = jsonObject.get("id").getAsString();
             }
             if (responseId != null) {
-                OllamaChatHistory.setResponseId(playerUuid, responseId);
+                AiChatHistory.setResponseId(playerUuid, responseId);
             }
 
             // 提取 output 数组中的内容
@@ -490,7 +511,7 @@ public class OllamaHttpClient {
 
             return new AIResponse(responseText, thinkingText);
         } catch (Exception e) {
-            return new AIResponse(Text.translatable("command.ollama.error.parse_failed").getString(), null);
+            return new AIResponse(Text.translatable("command.ai.error.parse_failed").getString(), null);
         }
     }
 

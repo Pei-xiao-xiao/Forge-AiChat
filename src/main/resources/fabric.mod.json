@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "ollamachat",
+  "id": "aichat",
   "version": "${version}",
-  "name": "OllamaChat",
+  "name": "AiChat",
   "description": "Chat with a locally deployed AI model from Ollama in Minecraft.",
   "authors": [
     ""
@@ -14,23 +14,23 @@
   },
   "donate": "kongbai",
   "license": "MIT",
-  "icon": "assets/ollamachat/icon.png",
+  "icon": "assets/aichat/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "fun.ollamachat.Ollamachat"
+      "fun.aichat.Aichat"
     ],
     "client": [
-      "fun.ollamachat.client.OllamachatClient"
+      "fun.aichat.client.AichatClient"
     ],
     "server": [
-      "fun.ollamachat.server.OllamachatServer"
+      "fun.aichat.server.AichatServer"
     ]
   },
   "mixins": [
-    "ollamachat.mixins.json",
+    "aichat.mixins.json",
     {
-      "config": "ollamachat.client.mixins.json",
+      "config": "aichat.client.mixins.json",
       "environment": "client"
     }
   ],

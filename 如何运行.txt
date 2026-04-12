@@ -1,5 +1,5 @@
 ===========================================
-OllamaChat 模组 - 运行说明
+AiChat 模组 - 运行说明
 ===========================================
 
 当前状态：
@@ -64,9 +64,9 @@ OllamaChat 模组 - 运行说明
 游戏内使用：
 -----------
 启动 Minecraft 后：
-- /ollama list - 列出所有模型
-- /ollama model <模型名> - 切换模型
-- /ollama serve - 启动 Ollama 服务
+- /ai list - 列出所有模型
+- /ai model <模型名> - 切换模型
+- /ai serve - 启动 Ollama 服务
 - 发送 ai <消息> 与 AI 对话
 
 前置要求：

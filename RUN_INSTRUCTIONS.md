@@ -27,7 +27,7 @@
 - 解压并添加到系统 PATH
 
 ### 3. Ollama (用于 AI 功能)
-- 访问 [Ollama 官网](https://ollama.ai/)
+- 访问 [Ollama 官网](https://ai.ai/)
 - 安装 Ollama
 - 运行 `ollama pull llama3` 下载模型
 
@@ -38,7 +38,7 @@
 1. 打开 PowerShell 或命令提示符
 2. 进入项目目录:
    ```bash
-   cd F:\Forge-ollamachat-main
+   cd F:\Forge-aichat-main
    ```
 3. 运行:
    ```bash
@@ -80,10 +80,10 @@
 
 启动 Minecraft 后，您可以使用以下命令:
 
-- `/ollama list` - 列出所有模型
-- `/ollama model <模型名>` - 切换到指定模型
-- `/ollama serve` - 启动 Ollama 服务
-- `/ollama ps` - 查看活跃进程
+- `/ai list` - 列出所有模型
+- `/ai model <模型名>` - 切换到指定模型
+- `/ai serve` - 启动 Ollama 服务
+- `/ai ps` - 查看活跃进程
 
 发送消息时以 `ai ` 开头即可与 AI 对话，例如:
 ```

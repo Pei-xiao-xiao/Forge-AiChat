@@ -1,4 +1,4 @@
-package fun.ollamachat;
+package fun.aichat;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -20,8 +20,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class OllamaChatHistory {
-    private static final Logger LOGGER = LoggerFactory.getLogger("OllamaChat");
+public class AiChatHistory {
+    private static final Logger LOGGER = LoggerFactory.getLogger("AiChat");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Object FILE_LOCK = new Object();
     /**
@@ -49,7 +49,7 @@ public class OllamaChatHistory {
      * 获取历史文件路径
      */
     private static Path getHistoryFilePath(UUID playerUuid) {
-        return OllamaConfig.getHistoryDir().resolve(playerUuid.toString() + ".json");
+        return AiConfig.getHistoryDir().resolve(playerUuid.toString() + ".json");
     }
 
     /**
@@ -91,7 +91,7 @@ public class OllamaChatHistory {
             history.add(new ChatRecord(role, content, System.currentTimeMillis()));
 
             // 限制历史记录数量，防止文件过大
-            int maxRecords = OllamaConfig.getMaxHistoryRecords();
+            int maxRecords = AiConfig.getMaxHistoryRecords();
             while (history.size() > maxRecords) {
                 history.remove(0);
             }
@@ -164,7 +164,7 @@ public class OllamaChatHistory {
 
     /**
      * 清除玩家的 response_id
-     * 在执行 /ollama history clear 时调用
+     * 在执行 /ai history clear 时调用
      */
     public static void clearResponseId(UUID playerUuid) {
         playerResponseIds.remove(playerUuid);

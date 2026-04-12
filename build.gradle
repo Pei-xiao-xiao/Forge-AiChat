@@ -14,7 +14,7 @@ loom {
     splitEnvironmentSourceSets()
 
     mods {
-        "ollamachat" {
+        "aichat" {
             sourceSet sourceSets.main
             sourceSet sourceSets.client
         }
@@ -23,7 +23,7 @@ loom {
     runs {
         server {
             server()
-            configName = "OllamaChat Server"
+            configName = "AiChat Server"
             ideConfigGenerated = true
             runDir = "run-server"
         }
