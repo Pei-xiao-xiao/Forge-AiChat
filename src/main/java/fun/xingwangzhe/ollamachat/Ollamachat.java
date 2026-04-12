@@ -6,5 +6,11 @@ public class Ollamachat implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // 公共层初始化，确保历史目录存在
+        try {
+            java.nio.file.Files.createDirectories(OllamaConfig.getHistoryDir());
+        } catch (Exception e) {
+            // 目录创建失败不影响主要功能
+        }
     }
 }

@@ -1,6 +1,5 @@
-package fun.xingwangzhe.ollamachat.client;
+package fun.xingwangzhe.ollamachat;
 
-import net.minecraft.text.Text;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -10,6 +9,8 @@ import java.util.concurrent.*;
 public class OllamaModelManager {
     private static final CopyOnWriteArrayList<String> cachedModels = new CopyOnWriteArrayList<>();
     private static String currentModel = "";
+    private static volatile boolean thinkEnabled = false;
+    private static volatile boolean searchEnabled = false;
     private static final int MODEL_UPDATE_INTERVAL = 300;
 
     public static List<String> getCachedModels() {
@@ -46,7 +47,6 @@ public class OllamaModelManager {
             cachedModels.addAll(newModels);
         } catch (Exception e) {
             cachedModels.clear();
-            cachedModels.add(Text.translatable("command.ollama.error.model_list_failed").getString());
         }
     }
 
@@ -62,11 +62,29 @@ public class OllamaModelManager {
         currentModel = model;
     }
 
+    // 深度思考开关
+    public static boolean isThinkEnabled() {
+        return thinkEnabled;
+    }
+
+    public static void setThinkEnabled(boolean enabled) {
+        thinkEnabled = enabled;
+    }
+
+    // 在线搜索开关
+    public static boolean isSearchEnabled() {
+        return searchEnabled;
+    }
+
+    public static void setSearchEnabled(boolean enabled) {
+        searchEnabled = enabled;
+    }
+
     static {
         Executors.newSingleThreadScheduledExecutor()
                 .scheduleAtFixedRate(
                         OllamaModelManager::updateModelsFromSystem,
-                        0, 300, TimeUnit.SECONDS
+                        0, MODEL_UPDATE_INTERVAL, TimeUnit.SECONDS
                 );
     }
 }

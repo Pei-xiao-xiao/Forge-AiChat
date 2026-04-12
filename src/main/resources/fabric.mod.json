@@ -15,13 +15,16 @@
   "donate": "https://afdian.com/a/xingwangzhe",
   "license": "MIT",
   "icon": "assets/ollamachat/icon.png",
-  "environment": "client",
+  "environment": "*",
   "entrypoints": {
+    "main": [
+      "fun.xingwangzhe.ollamachat.Ollamachat"
+    ],
     "client": [
       "fun.xingwangzhe.ollamachat.client.OllamachatClient"
     ],
-    "main": [
-      "fun.xingwangzhe.ollamachat.Ollamachat"
+    "server": [
+      "fun.xingwangzhe.ollamachat.server.OllamachatServer"
     ]
   },
   "mixins": [

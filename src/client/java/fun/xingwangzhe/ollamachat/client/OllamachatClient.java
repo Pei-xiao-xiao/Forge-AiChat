@@ -9,7 +9,7 @@ public class OllamachatClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         Executors.newSingleThreadScheduledExecutor().schedule(
-                OllamaModelManager::updateModelsFromSystem,
+                fun.xingwangzhe.ollamachat.OllamaModelManager::updateModelsFromSystem,
                 1, TimeUnit.SECONDS
         );
 
