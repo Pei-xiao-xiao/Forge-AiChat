@@ -34,6 +34,12 @@ public class AiConfig {
     private static int contextRounds = 5;
     private static int maxHistoryRecords = 200;
     private static String historyDirName = "aichat_history";
+    /** 当前选中的模型名称 */
+    private static String currentModel = "";
+    /** 深度思考开关 */
+    private static boolean thinkEnabled = false;
+    /** 在线搜索开关 */
+    private static boolean searchEnabled = false;
 
     public static ApiProvider getApiProvider() {
         return apiProvider;
@@ -131,6 +137,35 @@ public class AiConfig {
         saveConfig();
     }
 
+    // ========== 模型 / 开关持久化 ==========
+
+    public static String getCurrentModel() {
+        return currentModel;
+    }
+
+    public static void setCurrentModel(String model) {
+        currentModel = model;
+        saveConfig();
+    }
+
+    public static boolean isThinkEnabled() {
+        return thinkEnabled;
+    }
+
+    public static void setThinkEnabled(boolean enabled) {
+        thinkEnabled = enabled;
+        saveConfig();
+    }
+
+    public static boolean isSearchEnabled() {
+        return searchEnabled;
+    }
+
+    public static void setSearchEnabled(boolean enabled) {
+        searchEnabled = enabled;
+        saveConfig();
+    }
+
     public static void saveConfig() {
         try {
             JsonObject config = new JsonObject();
@@ -139,6 +174,9 @@ public class AiConfig {
             config.addProperty("apiKey", apiKey);
             config.addProperty("contextRounds", contextRounds);
             config.addProperty("maxHistoryRecords", maxHistoryRecords);
+            config.addProperty("currentModel", currentModel);
+            config.addProperty("thinkEnabled", thinkEnabled);
+            config.addProperty("searchEnabled", searchEnabled);
 
             Path parentDir = CONFIG_PATH.getParent();
             if (parentDir != null && !Files.exists(parentDir)) {
@@ -158,6 +196,7 @@ public class AiConfig {
     public static void loadConfig() {
         try {
             if (!Files.exists(CONFIG_PATH)) {
+                LOGGER.info("配置文件不存在，使用默认值: {}", CONFIG_PATH);
                 return;
             }
             String content = Files.readString(CONFIG_PATH);
@@ -183,7 +222,29 @@ public class AiConfig {
                 maxHistoryRecords = Math.max(10, Math.min(config.get("maxHistoryRecords").getAsInt(), 1000));
             }
 
-            LOGGER.info("Config loaded from {}", CONFIG_PATH);
+            // 模型和开关持久化
+            if (config.has("currentModel")) {
+                currentModel = config.get("currentModel").getAsString();
+            }
+            if (config.has("thinkEnabled")) {
+                thinkEnabled = config.get("thinkEnabled").getAsBoolean();
+            }
+            if (config.has("searchEnabled")) {
+                searchEnabled = config.get("searchEnabled").getAsBoolean();
+            }
+
+            // 打印完整配置状态
+            String maskedKey = apiKey.isEmpty() ? "(empty)" :
+                    (apiKey.length() < 8 ? "****" : apiKey.substring(0, 3) + "****" + apiKey.substring(apiKey.length() - 3));
+            LOGGER.info("========== AiChat 配置已加载 ==========");
+            LOGGER.info("API URL:   {}", apiUrl);
+            LOGGER.info("Provider:  {}", apiProvider.name());
+            LOGGER.info("API Key:   {}", maskedKey);
+            LOGGER.info("Model:     {}", currentModel.isEmpty() ? "(未选择)" : currentModel);
+            LOGGER.info("Think:     {}", thinkEnabled ? "ON" : "OFF");
+            LOGGER.info("Search:    {}", searchEnabled ? "ON" : "OFF");
+            LOGGER.info("Context:    {} 轮", contextRounds);
+            LOGGER.info("========================================");
         } catch (Exception e) {
             LOGGER.error("Failed to load config", e);
         }

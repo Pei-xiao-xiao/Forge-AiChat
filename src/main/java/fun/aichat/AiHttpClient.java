@@ -131,20 +131,30 @@ public class AiHttpClient {
         requestExecutor.submit(() -> {
             try {
                 HttpResponse<java.io.InputStream> response;
-                try {
-                    // 先尝试自动协商版本（优先 HTTP/2）
-                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-                } catch (java.net.http.HttpTimeoutException e) {
-                    // HTTP/2 协商超时，回退到 HTTP/1.1
-                    LOGGER.info("聊天请求 HTTP/2 协商超时，回退到 HTTP/1.1: {}", chatUrl);
-                    HttpRequest fallbackRequest = HttpRequest.newBuilder()
-                            .uri(URI.create(chatUrl))
-                            .timeout(Duration.ofSeconds(timeoutSeconds))
-                            .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                            .header("Content-Type", "application/json")
-                            .header("Authorization", request.headers().firstValue("Authorization").orElse(""))
-                            .build();
-                    response = httpClientFallback.send(fallbackRequest, HttpResponse.BodyHandlers.ofInputStream());
+
+                // LM Studio 和本地 OpenAI 兼容服务通常不支持 HTTP/2，
+                // 直接使用 HTTP/1.1 避免协商超时（超时会导致 10+ 秒延迟）
+                boolean useHttp11 = shouldUseHttp11(chatUrl, provider);
+
+                if (useHttp11) {
+                    LOGGER.info("直接使用 HTTP/1.1: {}", chatUrl);
+                    response = httpClientFallback.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                } else {
+                    try {
+                        // 先尝试自动协商版本（优先 HTTP/2）
+                        response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    } catch (java.net.http.HttpTimeoutException e) {
+                        // HTTP/2 协商超时，回退到 HTTP/1.1
+                        LOGGER.info("聊天请求 HTTP/2 协商超时，回退到 HTTP/1.1: {}", chatUrl);
+                        HttpRequest fallbackRequest = HttpRequest.newBuilder()
+                                .uri(URI.create(chatUrl))
+                                .timeout(Duration.ofSeconds(timeoutSeconds))
+                                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                                .header("Content-Type", "application/json")
+                                .header("Authorization", request.headers().firstValue("Authorization").orElse(""))
+                                .build();
+                        response = httpClientFallback.send(fallbackRequest, HttpResponse.BodyHandlers.ofInputStream());
+                    }
                 }
 
                 if (response.statusCode() != 200) {
@@ -182,18 +192,31 @@ public class AiHttpClient {
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
                     String line;
+                    int chunkCount = 0;
                     while ((line = reader.readLine()) != null) {
                         if (line.isEmpty()) continue;
+                        chunkCount++;
 
                         // 处理 SSE 格式：data: {...} 或纯 JSON 行
                         String jsonStr;
                         if (line.startsWith("data: ")) {
                             jsonStr = line.substring(6).trim();
-                            if (jsonStr.equals("[DONE]")) break;
+                            if (jsonStr.equals("[DONE]")) {
+                                LOGGER.info("流式数据结束 [DONE] (共 {} 个 chunk)", chunkCount);
+                                break;
+                            }
                         } else if (line.startsWith("{")) {
                             jsonStr = line;
                         } else {
                             continue;
+                        }
+
+                        // 打印前几个 chunk 帮助诊断（前 3 个用 INFO，其余用 DEBUG）
+                        String debugJson = jsonStr.length() > 500 ? jsonStr.substring(0, 500) + "..." : jsonStr;
+                        if (chunkCount <= 3) {
+                            LOGGER.info("流式 chunk #{}: {}", chunkCount, debugJson);
+                        } else {
+                            LOGGER.debug("流式 chunk #{}: {}", chunkCount, debugJson);
                         }
 
                         try {
@@ -211,9 +234,11 @@ public class AiHttpClient {
                                 parseOllamaStreamChunk(chunk, fullResponse, fullThinking, callback);
                             }
                         } catch (Exception e) {
-                            LOGGER.debug("Failed to parse stream chunk: {}", jsonStr);
+                            LOGGER.warn("Failed to parse stream chunk: {}", jsonStr.length() > 200 ? jsonStr.substring(0, 200) + "..." : jsonStr);
                         }
                     }
+                    LOGGER.info("流式读取完成，共 {} 个 chunk，响应长度: {}，思考长度: {}",
+                            chunkCount, fullResponse.length(), fullThinking.length());
                 }
 
                 // 保存 LM Studio response_id
@@ -224,6 +249,12 @@ public class AiHttpClient {
                 // 流式完成，发送完整结果
                 String responseText = cleanText(fullResponse.toString());
                 String thinkingText = cleanThinking(fullThinking.toString());
+
+                LOGGER.info("AI 响应完成 — 文本长度: {}, 思考长度: {}",
+                        responseText.length(), thinkingText != null ? thinkingText.length() : 0);
+                if (responseText.isEmpty()) {
+                    LOGGER.warn("AI 返回空响应！原始 fullResponse 长度: {}", fullResponse.length());
+                }
 
                 AiChatHistory.addMessage(playerUuid, "player", userInput);
                 AiChatHistory.addMessage(playerUuid, "ai", responseText);
@@ -280,50 +311,119 @@ public class AiHttpClient {
         // 提取增量文本
         if (chunk.has("response") && !chunk.get("response").isJsonNull()) {
             String token = chunk.get("response").getAsString();
-            fullResponse.append(token);
-            callback.onToken(token);
+            if (!token.isEmpty()) {
+                fullResponse.append(token);
+                callback.onToken(token);
+            }
         }
 
         // 提取思考过程
         if (chunk.has("thinking") && !chunk.get("thinking").isJsonNull()) {
             String thinkToken = chunk.get("thinking").getAsString();
-            fullThinking.append(thinkToken);
-            callback.onThinkingToken(thinkToken);
+            if (!thinkToken.isEmpty()) {
+                fullThinking.append(thinkToken);
+                callback.onThinkingToken(thinkToken);
+            }
+        }
+
+        // done=true 时检查最终字段
+        if (chunk.has("done") && chunk.get("done").getAsBoolean()) {
+            if (chunk.has("message")) {
+                JsonObject msg = chunk.getAsJsonObject("message");
+                if (msg.has("content") && !msg.get("content").isJsonNull() && fullResponse.length() == 0) {
+                    String finalContent = msg.get("content").getAsString();
+                    fullResponse.append(finalContent);
+                    callback.onToken(finalContent);
+                }
+            }
         }
     }
 
     /**
      * 解析 OpenAI 兼容格式流式 chunk
-     * 格式：{"choices":[{"delta":{"content":"token","reasoning_content":"..."}}]}
+     * 支持多种格式：
+     *   标准格式: {"choices":[{"delta":{"content":"token"}}]}
+     *   DeepSeek: {"choices":[{"delta":{"content":"token","reasoning_content":"..."}}]}
+     *   某些服务: delta 可能在 message 而非 choices 中
+     *   LM Studio /v1/chat/completions: 标准 OpenAI 格式
      */
     private static void parseOpenAIStreamChunk(JsonObject chunk, StringBuilder fullResponse,
                                                 StringBuilder fullThinking, AIStreamCallback callback) {
-        if (!chunk.has("choices")) return;
-        JsonArray choices = chunk.getAsJsonArray("choices");
-        if (choices.size() == 0) return;
+        // 标准路径：choices[0].delta
+        if (chunk.has("choices")) {
+            JsonArray choices = chunk.getAsJsonArray("choices");
+            if (!choices.isEmpty()) {
+                JsonObject firstChoice = choices.get(0).getAsJsonObject();
+                JsonObject delta = null;
 
-        JsonObject firstChoice = choices.get(0).getAsJsonObject();
-        if (!firstChoice.has("delta")) return;
-        JsonObject delta = firstChoice.getAsJsonObject("delta");
+                if (firstChoice.has("delta")) {
+                    delta = firstChoice.getAsJsonObject("delta");
+                } else if (firstChoice.has("message")) {
+                    // 非 stream 模式的完整消息（某些兼容 API 偶尔返回）
+                    delta = firstChoice.getAsJsonObject("message");
+                }
 
-        // 提取增量文本
-        if (delta.has("content") && !delta.get("content").isJsonNull()) {
-            String token = delta.get("content").getAsString();
-            fullResponse.append(token);
-            callback.onToken(token);
-        }
+                if (delta != null) {
+                    // 提取增量文本 — 兼容 content/text/message 等字段名
+                    String token = null;
+                    for (String fieldName : new String[]{"content", "text", "message", "part"}) {
+                        if (delta.has(fieldName) && !delta.get(fieldName).isJsonNull()) {
+                            String val = delta.get(fieldName).getAsString();
+                            if (!val.isEmpty()) {
+                                token = val;
+                                break;
+                            }
+                        }
+                    }
 
-        // 提取思考过程（DeepSeek reasoning_content）
-        if (delta.has("reasoning_content") && !delta.get("reasoning_content").isJsonNull()) {
-            String thinkToken = delta.get("reasoning_content").getAsString();
-            fullThinking.append(thinkToken);
-            callback.onThinkingToken(thinkToken);
-        }
-        // 兼容 thinking_content 字段
-        if (delta.has("thinking_content") && !delta.get("thinking_content").isJsonNull()) {
-            String thinkToken = delta.get("thinking_content").getAsString();
-            fullThinking.append(thinkToken);
-            callback.onThinkingToken(thinkToken);
+                    if (token != null && !token.isEmpty()) {
+                        fullResponse.append(token);
+                        callback.onToken(token);
+                        if (fullResponse.length() <= 50) {
+                            LOGGER.info("OpenAI 流式首个 token: '{}'", token);
+                        }
+                    }
+
+                    // 提取思考过程（DeepSeek reasoning_content / thinking_content / reasoning）
+                    for (String thinkField : new String[]{"reasoning_content", "thinking_content", "reasoning"}) {
+                        if (delta.has(thinkField) && !delta.get(thinkField).isJsonNull()) {
+                            String thinkToken = delta.get(thinkField).getAsString();
+                            if (!thinkToken.isEmpty()) {
+                                fullThinking.append(thinkToken);
+                                callback.onThinkingToken(thinkToken);
+                            }
+                        }
+                    }
+                } else {
+                    LOGGER.debug("OpenAI chunk 无 delta/message 字段，keys: {}", firstChoice.keySet());
+                }
+
+                // 检查 finish_reason
+                if (firstChoice.has("finish_reason")) {
+                    String finishReason = firstChoice.get("finish_reason").getAsString();
+                    LOGGER.debug("OpenAI finish_reason: {}", finishReason);
+                }
+            }
+        } else {
+            // 非标准路径：直接在顶层找内容字段
+            // 某些 API 可能返回 {"content": "..."} 或 {"text": "..."}
+            String token = null;
+            for (String fieldName : new String[]{"content", "text", "response", "message"}) {
+                if (chunk.has(fieldName) && !chunk.get(fieldName).isJsonNull()) {
+                    String val = chunk.get(fieldName).getAsString();
+                    if (!val.isEmpty()) {
+                        token = val;
+                        break;
+                    }
+                }
+            }
+            if (token != null && !token.isEmpty()) {
+                fullResponse.append(token);
+                callback.onToken(token);
+                LOGGER.debug("OpenAI 顶层文本 token: '{}'", token.length() > 50 ? token.substring(0, 50) + "..." : token);
+            } else {
+                LOGGER.debug("无法从 OpenAI chunk 提取文本，顶层 keys: {}", chunk.keySet());
+            }
         }
     }
 
@@ -341,6 +441,7 @@ public class AiHttpClient {
     private static String parseLMStudioStreamChunk(JsonObject chunk, StringBuilder fullResponse,
                                                     StringBuilder fullThinking, AIStreamCallback callback) {
         String type = chunk.has("type") ? chunk.get("type").getAsString() : "";
+        LOGGER.debug("LM Studio chunk type: {}", type);
 
         if ("content".equals(type) || "response.output_text.delta".equals(type)) {
             // 文本增量
@@ -348,8 +449,10 @@ public class AiHttpClient {
                 JsonObject delta = chunk.getAsJsonObject("delta");
                 if (delta.has("text") && !delta.get("text").isJsonNull()) {
                     String token = delta.get("text").getAsString();
-                    fullResponse.append(token);
-                    callback.onToken(token);
+                    if (!token.isEmpty()) {
+                        fullResponse.append(token);
+                        callback.onToken(token);
+                    }
                 }
             }
         } else if ("reasoning.delta".equals(type) || "response.reasoning.delta".equals(type)) {
@@ -358,8 +461,10 @@ public class AiHttpClient {
                 JsonObject delta = chunk.getAsJsonObject("delta");
                 if (delta.has("text") && !delta.get("text").isJsonNull()) {
                     String thinkToken = delta.get("text").getAsString();
-                    fullThinking.append(thinkToken);
-                    callback.onThinkingToken(thinkToken);
+                    if (!thinkToken.isEmpty()) {
+                        fullThinking.append(thinkToken);
+                        callback.onThinkingToken(thinkToken);
+                    }
                 }
             }
         } else if ("response.completed".equals(type)) {
@@ -378,6 +483,32 @@ public class AiHttpClient {
         }
 
         return null;
+    }
+
+    // ==================== HTTP 版本选择 ====================
+
+    /**
+     * 判断是否应直接使用 HTTP/1.1（跳过 HTTP/2 协商）
+     * LM Studio 和本地 Ollama/OpenAI 兼容服务通常不支持 HTTP/2，
+     * 先尝试 HTTP/2 会等待协商超时（10秒+），严重拖慢首次响应。
+     */
+    private static boolean shouldUseHttp11(String url, AiConfig.ApiProvider provider) {
+        // LM Studio 始终使用 HTTP/1.1
+        if (provider == AiConfig.ApiProvider.LMSTUDIO) return true;
+
+        // 本地地址（localhost / 127.0.0.1）通常不支持 HTTP/2
+        if (url != null) {
+            String lower = url.toLowerCase();
+            if (lower.contains("localhost") || lower.contains("127.0.0.1") || lower.contains("0.0.0.0")) {
+                return true;
+            }
+            // 常见本地端口
+            if (lower.contains(":11434") || lower.contains(":1234") || lower.contains(":8080") || lower.contains(":8888")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ==================== URL 推导 ====================
@@ -559,9 +690,205 @@ public class AiHttpClient {
 
     private static String cleanText(String text) {
         if (text == null) return "";
-        text = text.replaceAll("<[^>]*>", "").replace("\n", " ").replaceAll("\\s{2,}", " ").trim();
+        // 去掉 HTML 标签，保留换行
+        text = text.replaceAll("<[^>]*>", "")
+                .replaceAll("[\r]+", "")
+                .replaceAll("\n{3,}", "\n\n")
+                .replaceAll(" {2,}", " ")
+                .trim();
+        String[] lines = text.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            sb.append(lines[i].trim());
+            if (i < lines.length - 1) sb.append("\n");
+        }
+        text = sb.toString();
         if (text.length() > 500) text = text.substring(0, 500) + "...";
         return text;
+    }
+
+    /**
+     * 将 AI 回复中的 Markdown 文本转换为 Minecraft 富文本（Text 对象）
+     * 支持的 Markdown 语法：
+     *   #### 标题 → 粗体 + 金色
+     *   ###  标题 → 粗体 + 黄色
+     *   ##   标题 → 粗体 + 绿色
+     *   #    标题 → 粗体 + 青色
+     *   **粗体** → 加粗样式
+     *   *斜体*  → 斜体样式
+     *   ~~删除~~ → 删除线
+     *   `代码`   → 灰色
+     *   - 列表   → 项目符号
+     *   > 引用   → 灰色斜体
+     */
+    public static Text renderMarkdownToText(String markdown) {
+        if (markdown == null || markdown.isEmpty()) {
+            return Text.literal("");
+        }
+        net.minecraft.text.MutableText root = Text.literal("");
+        String[] lines = markdown.split("\n");
+
+        for (String line : lines) {
+            Text lineResult = parseMdLine(line);
+            if (lineResult != null) {
+                root.append(lineResult);
+            }
+            root.append(Text.literal("\n"));
+        }
+
+        return root;
+    }
+
+    /** 解析单行 Markdown 为 Text */
+    private static Text parseMdLine(String line) {
+        if (line == null || line.trim().isEmpty()) return null;
+
+        String trimmed = line;
+
+        // ===== 标题处理 =====
+        if (trimmed.startsWith("#### ")) {
+            return Text.literal("").append(parseInlineToText(trimmed.substring(5)))
+                    .styled(s -> s.withBold(true).withColor(0xFFD700)); // 金色
+        }
+        if (trimmed.startsWith("### ")) {
+            return Text.literal("").append(parseInlineToText(trimmed.substring(4)))
+                    .styled(s -> s.withBold(true).withColor(0xFFFF55)); // 黄色
+        }
+        if (trimmed.startsWith("## ")) {
+            return Text.literal("").append(parseInlineToText(trimmed.substring(3)))
+                    .styled(s -> s.withBold(true).withColor(0x55FF55)); // 绿色
+        }
+        if (trimmed.startsWith("# ")) {
+            return Text.literal("").append(parseInlineToText(trimmed.substring(2)))
+                    .styled(s -> s.withBold(true).withColor(0x55FFFF)); // 青色
+        }
+
+        // ===== 代码块标记行 =====
+        if (trimmed.equals("```") || trimmed.startsWith("```")) {
+            return null;
+        }
+
+        // ===== 引用 =====
+        if (trimmed.startsWith("> ")) {
+            return Text.literal("› ").append(parseInlineToText(trimmed.substring(2)))
+                    .styled(s -> s.withItalic(true).withColor(0xAAAAAA));
+        }
+
+        // ===== 无序列表 =====
+        if (trimmed.startsWith("- ") || (trimmed.startsWith("* ") && (trimmed.length() < 3 || trimmed.charAt(2) != '*'))) {
+            return Text.literal("• ").append(parseInlineToText(trimmed.substring(2)));
+        }
+
+        // ===== 有序列表 =====
+        if (trimmed.matches("^\\d+\\.\\s+.*")) {
+            int dotIdx = trimmed.indexOf(". ");
+            return Text.literal(trimmed.substring(0, dotIdx + 1) + " ")
+                    .append(parseInlineToText(trimmed.substring(dotIdx + 2)));
+        }
+
+        // ===== 普通行 =====
+        return parseInlineToText(trimmed);
+    }
+
+    /** 解析内联 Markdown 格式（**bold**, *italic*, ~~strike~~, `code`） */
+    private static net.minecraft.text.MutableText parseInlineToText(String text) {
+        java.util.List<Text> segments = new java.util.ArrayList<>();
+        java.util.List<java.util.function.Consumer<Text>> styles = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        java.util.function.Consumer<Text> currentStyle = null;
+
+        int i = 0;
+        while (i < text.length()) {
+
+            // **bold**
+            if (i < text.length() - 1 && text.charAt(i) == '*' && text.charAt(i + 1) == '*') {
+                flushSegment(segments, styles, current, currentStyle);
+                i += 2;
+                int end = text.indexOf("**", i);
+                if (end == -1) end = text.length();
+                String inner = text.substring(i, end);
+                segments.add(Text.literal(inner).styled(s -> s.withBold(true)));
+                i = end + 2;
+                continue;
+            }
+
+            // ~~strikethrough~~
+            if (i < text.length() - 1 && text.charAt(i) == '~' && text.charAt(i + 1) == '~') {
+                flushSegment(segments, styles, current, currentStyle);
+                i += 2;
+                int end = text.indexOf("~~", i);
+                if (end == -1) end = text.length();
+                String inner = text.substring(i, end);
+                segments.add(Text.literal(inner).styled(s -> s.withStrikethrough(true)));
+                i = end + 2;
+                continue;
+            }
+
+            // *italic*（不匹配 **）
+            if (text.charAt(i) == '*'
+                    && (i + 1 >= text.length() || text.charAt(i + 1) != '*')
+                    && (i == 0 || text.charAt(i - 1) != '*')) {
+                flushSegment(segments, styles, current, currentStyle);
+                i += 1;
+                int end = findNextItalicStar(text, i);
+                if (end == -1 || end >= text.length()) {
+                    current.append('*');
+                    continue;
+                }
+                String inner = text.substring(i, end);
+                segments.add(Text.literal(inner).styled(s -> s.withItalic(true)));
+                i = end + 1;
+                continue;
+            }
+
+            // `inline code`
+            if (text.charAt(i) == '`') {
+                flushSegment(segments, styles, current, currentStyle);
+                i += 1;
+                int end = text.indexOf('`', i);
+                if (end == -1) end = text.length();
+                String inner = text.substring(i, end);
+                segments.add(Text.literal(inner).styled(s -> s.withColor(0xAAAAAA))); // 灰色
+                i = end + 1;
+                continue;
+            }
+
+            current.append(text.charAt(i));
+            i++;
+        }
+
+        flushSegment(segments, styles, current, currentStyle);
+
+        // 合并所有段为单个 MutableText
+        net.minecraft.text.MutableText result = Text.literal("");
+        for (Text segment : segments) {
+            result.append(segment);
+        }
+        return result;
+    }
+
+    private static void flushSegment(java.util.List<Text> segments,
+                                     java.util.List<java.util.function.Consumer<Text>> styles,
+                                     StringBuilder current,
+                                     java.util.function.Consumer<Text> style) {
+        if (current.length() > 0) {
+            Text literal = Text.literal(current.toString());
+            segments.add(literal);
+            current.setLength(0);
+        }
+    }
+
+    /** 查找下一个未配对的 * 号（用于 italic，跳过 **） */
+    private static int findNextItalicStar(String text, int start) {
+        for (int i = start; i < text.length(); i++) {
+            if (text.charAt(i) == '*') {
+                if (i + 1 < text.length() && text.charAt(i + 1) == '*') {
+                    continue; // 跳过 bold 的部分
+                }
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static String cleanThinking(String text) {
@@ -572,15 +899,19 @@ public class AiHttpClient {
     }
 
     /**
-     * 构建带 hover tooltip 的富文本消息
+     * 构建带 hover tooltip 的富文本消息（Markdown 渲染）
      */
     public static Text buildAIText(AIResponse aiResponse) {
+        Text contentText = renderMarkdownToText(aiResponse.response);
+        net.minecraft.text.MutableText result = Text.literal("")
+                .append(Text.literal("[AI] ").styled(s -> s.withColor(0x55FF55).withBold(true)))
+                .append(contentText);
+
         if (aiResponse.hasThinking()) {
             Text thinkingText = Text.literal(aiResponse.thinking);
-            return Text.literal("[AI] " + aiResponse.response)
-                    .styled(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText)));
+            result.styled(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText)));
         }
-        return Text.literal("[AI] " + aiResponse.response);
+        return result;
     }
 
     public static int getActiveRequests() {

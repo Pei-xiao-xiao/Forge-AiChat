@@ -46,56 +46,59 @@ public class AiMessageHandler {
     }
 
     /**
-     * 流式聊天：先显示 [AI] 光标，然后逐字更新文本
+     * AI 聊天：发送请求，完成后一次性显示完整回复
+     * （Minecraft 聊天框不支持替换已有行，流式中间更新会导致消息堆叠）
      */
     private static void handleStreamChat(String userInput, UUID playerUuid) {
         MinecraftClient client = MinecraftClient.getInstance();
 
-        // 在主线程发送初始占位消息
+        // 发送一个"思考中"的占位消息
         client.execute(() -> {
             if (client.player == null) return;
-
-            // 发送带闪烁光标的初始消息
-            Text initialMsg = Text.literal("[AI] \u258C")  // ▌ 光标
-                    .styled(style -> style.withColor(0x55FF55)); // 绿色
-            client.player.sendMessage(initialMsg, false);
+            Text thinkingMsg = Text.literal("[AI] 思考中...")
+                    .styled(style -> style.withColor(0xAAAAAA)); // 灰色
+            client.player.sendMessage(thinkingMsg, false);
         });
 
         fun.aichat.AiHttpClient.handleAIRequestStream(userInput, playerUuid,
                 new fun.aichat.AiHttpClient.AIStreamCallback() {
-                    private final StringBuilder responseBuilder = new StringBuilder();
-                    private final StringBuilder thinkingBuilder = new StringBuilder();
-                    private long lastUpdateTime = 0;
-                    private static final long UPDATE_INTERVAL_MS = 80; // 每 80ms 更新一次显示
 
                     @Override
                     public void onToken(String token) {
-                        responseBuilder.append(token);
-                        throttledUpdate();
+                        // 收到 token 但不在聊天框逐字显示（避免消息堆叠）
+                        // token 已由 AiHttpClient 内部拼接为完整响应
                     }
 
                     @Override
                     public void onThinkingToken(String token) {
-                        thinkingBuilder.append(token);
+                        // 思考过程静默收集
                     }
 
                     @Override
                     public void onComplete(fun.aichat.AiHttpClient.AIResponse response) {
-                        // 最终完整显示
+                        // 最终一次性显示完整回复（Markdown 渲染为富文本）
                         client.execute(() -> {
                             if (client.player == null) return;
 
-                            Text finalText;
+                            String rawText = response.response;
+                            if (rawText == null || rawText.trim().isEmpty()) {
+                                rawText = "(AI 返回了空响应)";
+                            }
+
+                            // 将 Markdown 转为 Minecraft 富文本
+                            Text contentText = fun.aichat.AiHttpClient.renderMarkdownToText(rawText);
+
+                            net.minecraft.text.MutableText result = Text.literal("")
+                                    .append(Text.literal("[AI] ").styled(s -> s.withColor(0x55FF55).withBold(true)))
+                                    .append(contentText);
+
                             if (response.hasThinking()) {
                                 Text thinkingText = Text.literal(response.thinking);
-                                finalText = Text.literal("[AI] " + response.response)
-                                        .styled(style -> style.withHoverEvent(
-                                                new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText)));
-                            } else {
-                                finalText = Text.literal("[AI] " + response.response)
-                                        .styled(style -> style.withColor(0x55FF55));
+                                result.styled(style -> style.withHoverEvent(
+                                        new HoverEvent(HoverEvent.Action.SHOW_TEXT, thinkingText)));
                             }
-                            client.player.sendMessage(finalText, false);
+
+                            client.player.sendMessage(result, false);
                         });
                     }
 
@@ -106,26 +109,6 @@ public class AiMessageHandler {
                                 client.player.sendMessage(Text.literal("[AI] " + error)
                                         .styled(style -> style.withColor(0xFF5555)), false);
                             }
-                        });
-                    }
-
-                    private void throttledUpdate() {
-                        long now = System.currentTimeMillis();
-                        if (now - lastUpdateTime < UPDATE_INTERVAL_MS) return;
-                        lastUpdateTime = now;
-
-                        client.execute(() -> {
-                            if (client.player == null) return;
-
-                            String currentText = responseBuilder.toString();
-                            // 限制显示长度避免过长
-                            if (currentText.length() > 200) {
-                                currentText = currentText.substring(currentText.length() - 200);
-                            }
-
-                            Text progressMsg = Text.literal("[AI] " + currentText + "\u258C")
-                                    .styled(style -> style.withColor(0x55FF55));
-                            client.player.sendMessage(progressMsg, false);
                         });
                     }
                 });

@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 public class AiModelManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("AiChat");
     private static final CopyOnWriteArrayList<String> cachedModels = new CopyOnWriteArrayList<>();
-    private static String currentModel = "";
+    // 以下三个状态委托给 AiConfig 持久化（不再用本地字段，启动时自动恢复）
     private static volatile boolean thinkEnabled = false;
     private static volatile boolean searchEnabled = false;
     private static final int MODEL_UPDATE_INTERVAL = 300;
@@ -112,7 +112,8 @@ public class AiModelManager {
     }
 
     /**
-     * 尝试从指定 URL 获取模型列表（自动回退 HTTP/1.1）
+     * 尝试从指定 URL 获取模型列表
+     * LM Studio 和本地服务直接使用 HTTP/1.1，避免 HTTP/2 协商超时
      */
     private static List<String> tryFetchModels(String url, String format) {
         try {
@@ -132,20 +133,26 @@ public class AiModelManager {
             
             HttpRequest request = requestBuilder.build();
             
-            // 先尝试自动协商版本（优先 HTTP/2）
+            // 判断是否直接使用 HTTP/1.1
+            boolean useHttp11 = shouldUseHttp11ForModels(url, provider);
             HttpResponse<String> response;
-            try {
-                response = modelHttpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            } catch (java.net.http.HttpTimeoutException e) {
-                // HTTP/2 协商超时，回退到 HTTP/1.1
-                LOGGER.info("HTTP/2 协商超时，回退到 HTTP/1.1: {}", url);
-                HttpRequest fallbackRequest = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .timeout(Duration.ofSeconds(10))
-                        .GET()
-                        .header("Authorization", request.headers().firstValue("Authorization").orElse(""))
-                        .build();
-                response = modelHttpClientFallback.send(fallbackRequest, HttpResponse.BodyHandlers.ofString());
+            
+            if (useHttp11) {
+                LOGGER.info("直接使用 HTTP/1.1 获取模型列表: {}", url);
+                response = modelHttpClientFallback.send(request, HttpResponse.BodyHandlers.ofString());
+            } else {
+                try {
+                    response = modelHttpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                } catch (java.net.http.HttpTimeoutException e) {
+                    LOGGER.info("HTTP/2 协商超时，回退到 HTTP/1.1: {}", url);
+                    HttpRequest fallbackRequest = HttpRequest.newBuilder()
+                            .uri(URI.create(url))
+                            .timeout(Duration.ofSeconds(10))
+                            .GET()
+                            .header("Authorization", request.headers().firstValue("Authorization").orElse(""))
+                            .build();
+                    response = modelHttpClientFallback.send(fallbackRequest, HttpResponse.BodyHandlers.ofString());
+                }
             }
             
             LOGGER.info("模型列表响应: URL={}, 状态码={}", url, response.statusCode());
@@ -257,6 +264,19 @@ public class AiModelManager {
         }
     }
 
+    /**
+     * 判断模型列表请求是否应直接使用 HTTP/1.1
+     */
+    private static boolean shouldUseHttp11ForModels(String url, AiConfig.ApiProvider provider) {
+        if (provider == AiConfig.ApiProvider.LMSTUDIO) return true;
+        if (url != null) {
+            String lower = url.toLowerCase();
+            if (lower.contains("localhost") || lower.contains("127.0.0.1") || lower.contains("0.0.0.0")) return true;
+            if (lower.contains(":11434") || lower.contains(":1234") || lower.contains(":8080") || lower.contains(":8888")) return true;
+        }
+        return false;
+    }
+
     public static synchronized void updateModelsFromSystem() {
         try {
             Process process = new ProcessBuilder("ollama", "list").start();
@@ -295,11 +315,12 @@ public class AiModelManager {
     }
 
     public static String getCurrentModel() {
-        return currentModel;
+        // 优先使用 AiConfig 持久化值（如果本地未设置过）
+        return AiConfig.getCurrentModel();
     }
 
     public static void setCurrentModel(String model) {
-        currentModel = model;
+        AiConfig.setCurrentModel(model);
     }
 
     // 深度思考开关
@@ -309,6 +330,7 @@ public class AiModelManager {
 
     public static void setThinkEnabled(boolean enabled) {
         thinkEnabled = enabled;
+        AiConfig.setThinkEnabled(enabled);
     }
 
     // 在线搜索开关
@@ -318,6 +340,19 @@ public class AiModelManager {
 
     public static void setSearchEnabled(boolean enabled) {
         searchEnabled = enabled;
+        AiConfig.setSearchEnabled(enabled);
+    }
+
+    /**
+     * 从持久化配置恢复运行时状态（启动时调用）
+     * 恢复：thinkEnabled、searchEnabled
+     */
+    public static void restoreFromConfig() {
+        thinkEnabled = AiConfig.isThinkEnabled();
+        searchEnabled = AiConfig.isSearchEnabled();
+        String model = AiConfig.getCurrentModel();
+        LOGGER.info("状态已恢复 — Model: {}, Think: {}, Search: {}",
+                model.isEmpty() ? "(未选择)" : model, thinkEnabled, searchEnabled);
     }
 
     static {
